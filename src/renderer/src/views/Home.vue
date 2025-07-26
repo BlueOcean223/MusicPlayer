@@ -1,14 +1,28 @@
 <template>
   <div class="home-container">
-    <!-- 顶部音乐列表标题和导入按钮 -->
+    <!-- 顶部音乐列表标题和按钮 -->
     <div class="top-bar">
       <h1 class="page-title">音乐列表</h1>
-      <NButton type="primary" size="large" @click="importMusic">
-        <template #icon>
-          <NIcon :component="AddOutline" />
-        </template>
-        导入歌曲
-      </NButton>
+      <div class="top-buttons">
+        <NButton 
+          v-if="playerStore.playlist.length > 0" 
+          type="primary" 
+          size="large" 
+          @click="toggleManageMode"
+          :secondary="!isManageMode"
+        >
+          <template #icon>
+            <NIcon :component="isManageMode ? CheckmarkOutline : SettingsOutline" />
+          </template>
+          {{ isManageMode ? '完成' : '管理列表' }}
+        </NButton>
+        <NButton type="primary" size="large" @click="importMusic">
+          <template #icon>
+            <NIcon :component="AddOutline" />
+          </template>
+          导入歌曲
+        </NButton>
+      </div>
     </div>
     
     <!-- 音乐列表 -->
@@ -19,6 +33,7 @@
         <span class="track-artist">歌手</span>
         <span class="track-album">专辑</span>
         <span class="track-duration">时长</span>
+        <span v-if="isManageMode" class="track-actions">操作</span>
       </div>
       
       <div class="list-content">
@@ -26,9 +41,9 @@
           v-for="(song, index) in playerStore.playlist" 
           :key="song.id"
           class="track-item"
-          :class="{ 'active': playerStore.currentSong?.id === song.id }"
-          @click="playSong(song)"
-          @dblclick="playSong(song)"
+          :class="{ 'active': playerStore.currentSong?.id === song.id, 'manage-mode': isManageMode }"
+          @click="!isManageMode && playSong(song)"
+          @dblclick="!isManageMode && playSong(song)"
         >
           <span class="track-number">{{ index + 1 }}</span>
           <div class="track-info">
@@ -46,7 +61,30 @@
           <span class="track-artist">{{ song.artist }}</span>
           <span class="track-album">{{ song.album }}</span>
           <span class="track-duration">{{ formatTime(song.duration) }}</span>
+          <div v-if="isManageMode" class="track-actions">
+            <NButton 
+              type="error" 
+              size="small" 
+              @click.stop="removeSong(song.id)"
+              :disabled="playerStore.playlist.length === 1"
+            >
+              <template #icon>
+                <NIcon :component="TrashOutline" />
+              </template>
+              删除
+            </NButton>
+          </div>
         </div>
+      </div>
+      
+      <!-- 管理模式下的批量操作 -->
+      <div v-if="isManageMode" class="batch-actions">
+        <NButton type="error" @click="clearAllSongs" :disabled="playerStore.playlist.length === 0">
+          <template #icon>
+            <NIcon :component="TrashOutline" />
+          </template>
+          清空列表
+        </NButton>
       </div>
     </div>
     
@@ -68,15 +106,21 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { usePlayerStore } from '../store/player'
 import { 
   NButton, NIcon
 } from 'naive-ui'
 import { 
-  AddOutline, MusicalNotesOutline
+  AddOutline, 
+  MusicalNotesOutline,
+  SettingsOutline,
+  CheckmarkOutline,
+  TrashOutline
 } from '@vicons/ionicons5'
 
 const playerStore = usePlayerStore()
+const isManageMode = ref(false)
 
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return '0:00'
@@ -98,6 +142,21 @@ const importMusic = async () => {
 
 const playSong = (song: any) => {
   playerStore.play(song)
+}
+
+const toggleManageMode = () => {
+  isManageMode.value = !isManageMode.value
+}
+
+const removeSong = (songId: string) => {
+  playerStore.removeSong(songId)
+}
+
+const clearAllSongs = () => {
+  if (confirm('确定要清空整个播放列表吗？')) {
+    playerStore.clearPlaylist()
+    isManageMode.value = false
+  }
 }
 </script>
 
@@ -124,6 +183,11 @@ const playSong = (song: any) => {
   z-index: 10;
 }
 
+.top-buttons {
+  display: flex;
+  gap: 12px;
+}
+
 .page-title {
   font-size: 32px;
   font-weight: bold;
@@ -139,17 +203,20 @@ const playSong = (song: any) => {
 
 .list-header {
   display: grid;
-  grid-template-columns: 50px 1fr 200px 200px 80px;
+  grid-template-columns: 50px 1fr 200px 200px 80px 120px;
   gap: 16px;
-  padding: 12px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid #333;
   font-weight: 500;
   color: #b3b3b3;
   margin-bottom: 8px;
-  position: sticky;
-  top: 88px;
+  top: 60px;
   background: #121212;
   z-index: 9;
+}
+
+.list-header:not(.manage-mode) {
+  grid-template-columns: 50px 1fr 200px 200px 80px;
 }
 
 .list-content {
@@ -158,7 +225,7 @@ const playSong = (song: any) => {
 
 .track-item {
   display: grid;
-  grid-template-columns: 50px 1fr 200px 200px 80px;
+  grid-template-columns: 50px 1fr 200px 200px 80px 120px;
   gap: 16px;
   padding: 12px 16px;
   border-radius: 8px;
@@ -167,7 +234,15 @@ const playSong = (song: any) => {
   margin-bottom: 4px;
 }
 
-.track-item:hover {
+.track-item:not(.manage-mode) {
+  grid-template-columns: 50px 1fr 200px 200px 80px;
+}
+
+.track-item.manage-mode {
+  cursor: default;
+}
+
+.track-item:hover:not(.manage-mode) {
   background: #1a1a1a;
 }
 
@@ -232,6 +307,20 @@ const playSong = (song: any) => {
 .track-duration {
   color: #e2dede;
   text-align: right;
+}
+
+.track-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.batch-actions {
+  margin-top: 16px;
+  padding: 16px;
+  border-top: 1px solid #333;
+  display: flex;
+  justify-content: center;
 }
 
 .empty-state {

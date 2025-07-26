@@ -16797,7 +16797,6 @@ ipcMain.handle("read-lyrics", async (_, filePath, songInfo = null) => {
         return metadata.common.lyrics;
       }
     }
-    console.log("内嵌歌词不存在，尝试在线获取歌词...");
     const title = songInfo?.title || metadata.common.title;
     const artist = songInfo?.artist || metadata.common.artist;
     if (title && artist) {

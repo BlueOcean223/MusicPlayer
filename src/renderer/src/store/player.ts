@@ -266,6 +266,58 @@ export const usePlayerStore = defineStore('player', {
       }
       
       return ''
+    },
+    
+    removeSong(songId: string) {
+      const index = this.playlist.findIndex(song => song.id === songId)
+      if (index !== -1) {
+        const songToRemove = this.playlist[index]
+        
+        // 如果要删除的是当前播放的歌曲
+        if (this.currentSong && this.currentSong.id === songId) {
+          // 停止播放
+          if (this.currentSong.howl) {
+            this.currentSong.howl.stop()
+            this.currentSong.howl = null
+          }
+          
+          // 如果还有其他歌曲，播放下一首
+          if (this.playlist.length > 1) {
+            const nextIndex = index < this.playlist.length - 1 ? index : index - 1
+            this.playlist.splice(index, 1)
+            if (this.playlist.length > 0) {
+              this.play(this.playlist[nextIndex] || this.playlist[0])
+            } else {
+              this.currentSong = null
+              this.isPlaying = false
+              this.currentTime = 0
+            }
+          } else {
+            this.playlist.splice(index, 1)
+            this.currentSong = null
+            this.isPlaying = false
+            this.currentTime = 0
+          }
+        } else {
+          // 删除非当前播放的歌曲
+          this.playlist.splice(index, 1)
+        }
+      }
+    },
+    
+    clearPlaylist() {
+      // 停止当前播放
+      if (this.currentSong && this.currentSong.howl) {
+        this.currentSong.howl.stop()
+      }
+      
+      // 清空播放列表
+      this.playlist = []
+      this.currentSong = null
+      this.isPlaying = false
+      this.currentTime = 0
+      this.lyrics = null
+      this.parsedLyrics = []
     }
   }
 })

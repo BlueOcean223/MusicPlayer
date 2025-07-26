@@ -157,7 +157,6 @@ async function fetchLyricsOnline(title: string, artist: string): Promise<string 
       });
 
       if (lyricsResponse.data?.lrc?.lyric) {
-        console.log('find it in cloudmusic')
         return lyricsResponse.data.lrc.lyric;
       }
     }
@@ -204,7 +203,6 @@ async function fetchLyricsFromQQMusic(title: string, artist: string): Promise<st
       });
 
       if (lyricsResponse.data?.lyric) {
-        console.log('find it in qqmusic')
         return lyricsResponse.data.lyric;
       }
     }
