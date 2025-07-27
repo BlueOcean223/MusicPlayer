@@ -21,7 +21,7 @@ export const usePlayerStore = defineStore('player', {
     playlist: [] as Song[],
     isPlaying: false,
     currentTime: 0,
-    volume: 0.7,
+    volume: 0.3,
     lyrics: null as string | null,
     parsedLyrics: [] as {time: number, text: string}[]
   }),
@@ -48,6 +48,8 @@ export const usePlayerStore = defineStore('player', {
             }
             
             this.playlist.push(song)
+            // 保存到本地缓存
+            this.updateLocalCache()
           }
         } catch (error) {
           console.error('Error adding song:', error)
@@ -271,8 +273,6 @@ export const usePlayerStore = defineStore('player', {
     removeSong(songId: string) {
       const index = this.playlist.findIndex(song => song.id === songId)
       if (index !== -1) {
-        const songToRemove = this.playlist[index]
-        
         // 如果要删除的是当前播放的歌曲
         if (this.currentSong && this.currentSong.id === songId) {
           // 停止播放
@@ -302,6 +302,8 @@ export const usePlayerStore = defineStore('player', {
           // 删除非当前播放的歌曲
           this.playlist.splice(index, 1)
         }
+        // 更新本地缓存
+        this.updateLocalCache()
       }
     },
     
@@ -318,6 +320,46 @@ export const usePlayerStore = defineStore('player', {
       this.currentTime = 0
       this.lyrics = null
       this.parsedLyrics = []
+      // 更新本地缓存
+      this.updateLocalCache()
+    },
+
+    // 使用本地缓存初始化
+    initFromLocalCache() {
+      const cache = localStorage.getItem('musicPlayerCache')
+      if (cache) {
+        const {
+          playlist,
+          currentSong,
+          isPlaying,
+          currentTime,
+          volume,
+          lyrics,
+          parsedLyrics
+        } = JSON.parse(cache)
+
+        this.playlist = playlist
+        this.currentSong = currentSong
+        this.isPlaying = isPlaying
+        this.currentTime = currentTime
+        this.volume = volume
+        this.lyrics = lyrics
+        this.parsedLyrics = parsedLyrics
+      }
+    },
+
+    // 更新本地缓存
+    updateLocalCache() {
+      const cache = {
+        playlist: this.playlist,
+        currentSong: this.currentSong,
+        isPlaying: this.isPlaying,
+        currentTime: this.currentTime,
+        volume: this.volume,
+        lyrics: this.lyrics,
+        parsedLyrics: this.parsedLyrics
+      }
+      localStorage.setItem('musicPlayerCache', JSON.stringify(cache))
     }
   }
 })

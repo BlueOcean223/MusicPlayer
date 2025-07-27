@@ -16842,7 +16842,6 @@ async function fetchLyricsOnline(title, artist) {
         timeout: 1e4
       });
       if (lyricsResponse.data?.lrc?.lyric) {
-        console.log("find it in cloudmusic");
         return lyricsResponse.data.lrc.lyric;
       }
     }
@@ -16879,7 +16878,6 @@ async function fetchLyricsFromQQMusic(title, artist) {
         timeout: 1e4
       });
       if (lyricsResponse.data?.lyric) {
-        console.log("find it in qqmusic");
         return lyricsResponse.data.lyric;
       }
     }

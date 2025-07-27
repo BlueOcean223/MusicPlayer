@@ -4,7 +4,7 @@
     
     <div class="content">
       <div class="back-button">
-        <NButton circle size="large" @click="router.go(-1)">
+        <NButton circle size="large" @click="router.push('/')">
           <NIcon :component="ArrowBackOutline" size="24" />
         </NButton>
       </div>
@@ -51,9 +51,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '../store/player'
-import { 
-  NButton, NIcon 
-} from 'naive-ui'
+import { NButton, NIcon } from 'naive-ui'
 import { 
   ArrowBackOutline, 
   MusicalNotesOutline

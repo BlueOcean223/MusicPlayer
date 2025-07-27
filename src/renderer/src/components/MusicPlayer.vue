@@ -1,7 +1,7 @@
 <template>
   <div class="music-player" v-if="playerStore.currentSong">
     <!-- 歌曲信息 -->
-    <div class="song-info" @click="$router.push('/now-playing')">
+    <div class="song-info" @click="showNowPlaying">
       <img v-if="playerStore.currentSong.albumArt" :src="playerStore.currentSong.albumArt" class="current-cover" />
       <div class="current-cover-placeholder" v-else>
         <NIcon :component="MusicalNotesOutline" />
@@ -58,8 +58,11 @@ import { ref, computed } from 'vue'
 import { usePlayerStore } from '../store/player'
 import { NButton, NSlider, NIcon } from 'naive-ui'
 import { PlayCircleOutline, PauseCircleOutline, PlaySkipBackOutline, PlaySkipForwardOutline, VolumeHighOutline, MusicalNotesOutline } from '@vicons/ionicons5'
+import { useRouter,useRoute } from 'vue-router'
 
 const playerStore = usePlayerStore()
+const router = useRouter()
+const route = useRoute()
 const volume = ref(playerStore.volume * 100) // 转换为0-100范围
 
 const formatTime = (seconds: number) => {
@@ -88,6 +91,16 @@ const handleSeek = (value: number) => {
 
 const handleVolumeChange = (value: number) => {
   playerStore.setVolume(value / 100) // 转换回0-1范围给store
+}
+
+// 显示/关闭正在播放的歌曲页面
+const showNowPlaying = () => {
+  const currentRoute = route.path
+  if (currentRoute !== '/now-playing') {
+    router.push('/now-playing')
+  } else {
+    router.push('/')
+  }
 }
 </script>
 

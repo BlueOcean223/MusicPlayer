@@ -66,7 +66,6 @@
               type="error" 
               size="small" 
               @click.stop="removeSong(song.id)"
-              :disabled="playerStore.playlist.length === 1"
             >
               <template #icon>
                 <NIcon :component="TrashOutline" />
@@ -108,9 +107,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { usePlayerStore } from '../store/player'
-import { 
-  NButton, NIcon
-} from 'naive-ui'
+import { NButton, NIcon } from 'naive-ui'
 import { 
   AddOutline, 
   MusicalNotesOutline,

@@ -20,6 +20,14 @@
 <script setup lang="ts">
 import TitleBar from './components/TitleBar.vue'
 import MusicPlayer from './components/MusicPlayer.vue'
+import { usePlayerStore } from './store/player'
+import { onMounted } from 'vue'
+
+// 在程序启动时，加载本地缓存
+onMounted(() => {
+  const playerStore = usePlayerStore()
+  playerStore.initFromLocalCache()
+})
 </script>
 
 <style>
