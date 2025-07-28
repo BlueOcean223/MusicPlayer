@@ -3,12 +3,6 @@
     <div class="background-blur" :style="{ backgroundImage: playerStore.currentSong?.albumArt ? `url(${playerStore.currentSong.albumArt})` : 'none' }"></div>
     
     <div class="content">
-      <div class="back-button">
-        <NButton circle size="large" @click="router.push('/')">
-          <NIcon :component="ArrowBackOutline" size="24" />
-        </NButton>
-      </div>
-      
       <!-- 主要内容区域 -->
       <div class="main-content">
         <!-- 专辑封面 -->
@@ -30,7 +24,7 @@
           
           <!-- 歌词区域 -->
           <div class="lyrics-section">
-            <div class="lyrics-container">
+            <div class="lyrics-container" ref="lyricsContainer">
               <div 
                 v-for="(item, index) in limitedDisplayLyrics" 
                 :key="item.originalIndex"
@@ -48,24 +42,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref } from 'vue'
 import { usePlayerStore } from '../store/player'
-import { NButton, NIcon } from 'naive-ui'
-import { 
-  ArrowBackOutline, 
-  MusicalNotesOutline
-} from '@vicons/ionicons5'
+import { NIcon } from 'naive-ui'
+import { MusicalNotesOutline } from '@vicons/ionicons5'
 
 const playerStore = usePlayerStore()
-const router = useRouter()
+const lyricsContainer = ref<HTMLElement>()
 
 // 显示歌词
 const displayLyrics = computed(() => {
-  if (!playerStore.parsedLyrics.length) {
-    return ['暂无歌词']
-  }
-  return playerStore.parsedLyrics.map(lyric => lyric.text)
+  return playerStore.parsedLyrics.length 
+    ? playerStore.parsedLyrics.map(lyric => lyric.text)
+    : ['暂无歌词']
 })
 
 // 限制显示的歌词数量（最多显示8行）
@@ -76,12 +65,7 @@ const limitedDisplayLyrics = computed(() => {
   }
   
   const currentIndex = activeLyricIndex.value
-  if (currentIndex === -1) {
-    return lyrics.slice(0, 8).map((text, index) => ({ text, originalIndex: index }))
-  }
-  
-  // 以当前歌词为中心，显示前后各3-4行
-  const start = Math.max(0, currentIndex - 3)
+  const start = currentIndex === -1 ? 0 : Math.max(0, currentIndex - 3)
   const end = Math.min(lyrics.length, start + 8)
   
   return lyrics.slice(start, end).map((text, index) => ({ text, originalIndex: start + index }))
@@ -106,16 +90,16 @@ const activeLyricIndex = computed(() => {
 // 计算在限制显示歌词中的相对索引
 const relativeActiveLyricIndex = computed(() => {
   const currentIndex = activeLyricIndex.value
-  if (currentIndex === -1) return -1
-  
-  return limitedDisplayLyrics.value.findIndex(item => item.originalIndex === currentIndex)
+  return currentIndex === -1 ? -1 : limitedDisplayLyrics.value.findIndex(item => item.originalIndex === currentIndex)
 })
+
 </script>
 
 <style scoped>
 .now-playing-container {
   position: relative;
-  height: 100vh;
+  height: 100%;
+  width: 100%;
   overflow: hidden;
   background: #1a1a1a;
 }
@@ -136,24 +120,25 @@ const relativeActiveLyricIndex = computed(() => {
 .content {
   position: relative;
   z-index: 1;
-  height: 100%;
+  height: 85vh;
   display: flex;
   flex-direction: column;
-  padding: 2vh 3vw;
+  padding: 0;
   background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.8) 100%);
-}
-
-.back-button {
-  margin-bottom: 2vh;
+  box-sizing: border-box;
 }
 
 .main-content {
   flex: 1;
   display: flex;
   gap: 4vw;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  min-height: 0;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2vh 3vw;
+  box-sizing: border-box;
+  max-height: calc(100vh - 4vh);
 }
 
 /* 专辑封面区域 */
@@ -165,26 +150,24 @@ const relativeActiveLyricIndex = computed(() => {
 }
 
 .album-cover {
-  width: min(35vw, 350px);
-  height: min(35vw, 350px);
-  max-width: 350px;
-  max-height: 350px;
-  min-width: 200px;
-  min-height: 200px;
+  width: min(28vw, 280px);
+  height: min(28vw, 280px);
+  min-width: 160px;
+  min-height: 160px;
   border-radius: 15px;
-  overflow: hidden;
-  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.5);
-  transition: transform 0.3s ease;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .album-cover:hover {
-  transform: scale(1.02);
+  transform: scale(1.03) rotateY(5deg);
 }
 
 .album-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 15px;
 }
 
 .album-placeholder {
@@ -195,6 +178,7 @@ const relativeActiveLyricIndex = computed(() => {
   align-items: center;
   justify-content: center;
   color: #888;
+  border-radius: 15px;
 }
 
 /* 信息区域 */
@@ -204,20 +188,25 @@ const relativeActiveLyricIndex = computed(() => {
   flex-direction: column;
   gap: 2vh;
   min-width: 0;
-  max-width: 500px;
+  max-width: 400px;
+  align-items: center;
+  text-align: center;
 }
 
 .song-info {
-  text-align: left;
+  text-align: center;
+  width: 100%;
+  flex-shrink: 0;
 }
 
 .song-title {
-  font-size: clamp(1.2rem, 3vw, 2rem);
+  font-size: clamp(1.2rem, 2.8vw, 1.8rem);
   font-weight: bold;
   color: #fff;
   margin: 0 0 0.5rem 0;
   line-height: 1.2;
   word-break: break-word;
+  display: block;
 }
 
 .song-artist {
@@ -233,36 +222,37 @@ const relativeActiveLyricIndex = computed(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  width: 100%;
 }
 
 .lyrics-container {
   flex: 1;
-  padding: 1rem 0;
-  min-height: 180px;
-  max-height: 240px;
-  overflow: hidden;
+  padding: 0;
+  height: 100%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .lyric-line {
-  padding: 0.3rem 0;
+  padding: 0.3rem 0.8rem;
   font-size: clamp(0.85rem, 1.8vw, 1rem);
   line-height: 1.4;
   color: #b3b3b3;
-  transition: all 0.3s ease;
-  text-align: left;
-  border-left: 3px solid transparent;
-  padding-left: 0.5rem;
+  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: center;
+  margin: 0.1rem 0;
+  border-radius: 6px;
+  position: relative;
+  transform-origin: center;
+  flex-shrink: 0;
 }
 
 .lyric-line.active {
   color: #fff;
   font-weight: 600;
-  transform: translateX(8px);
-  border-left-color: #18a058;
-  background: rgba(24, 160, 88, 0.15);
-  border-radius: 4px;
-  padding-left: 0.8rem;
-  box-shadow: 0 2px 8px rgba(24, 160, 88, 0.3);
+  transform: scale(1.05);
 }
 
 /* 响应式设计 */
@@ -271,48 +261,57 @@ const relativeActiveLyricIndex = computed(() => {
     flex-direction: column;
     align-items: center;
     gap: 3vh;
+    padding: 2vh 2vw;
+    max-height: calc(100vh - 4vh);
   }
   
   .album-cover {
-    width: min(60vw, 250px);
-    height: min(60vw, 250px);
+    width: min(45vw, 200px);
+    height: min(45vw, 200px);
   }
   
   .info-section {
     width: 100%;
     max-width: none;
-  }
-  
-  .song-info {
-    text-align: center;
+    gap: 1.5vh;
   }
 }
 
 @media (max-width: 600px) {
-  .content {
-    padding: 1vh 2vw;
-  }
-  
   .main-content {
+    padding: 1.5vh 2vw;
     gap: 2vh;
   }
   
   .album-cover {
-    width: min(70vw, 200px);
-    height: min(70vw, 200px);
+    width: min(55vw, 180px);
+    height: min(55vw, 180px);
   }
   
-  .lyrics-container {
-    padding: 0.5rem 0;
-    min-height: 150px;
-    max-height: 180px;
+  .lyric-line {
+    font-size: clamp(0.8rem, 1.6vw, 0.95rem);
+    padding: 0.25rem 0.6rem;
+    margin: 0.05rem 0;
   }
 }
 
 @media (max-height: 600px) {
-  .lyrics-container {
-    min-height: 120px;
-    max-height: 150px;
+  .main-content {
+    gap: 1.5vh;
+    padding: 1vh 2vw;
+  }
+  
+  .song-title {
+    font-size: clamp(1rem, 2.4vw, 1.4rem);
+    margin-bottom: 0.3rem;
+  }
+  
+  .song-artist {
+    font-size: clamp(0.8rem, 1.8vw, 1rem);
+  }
+  
+  .info-section {
+    gap: 1vh;
   }
 }
 </style>
