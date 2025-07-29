@@ -15,22 +15,41 @@
     <!-- 播放控制 -->
     <div class="player-controls">
       <div class="control-buttons">
-        <NButton circle type="primary" @click="playerStore.prev">
-          <NIcon :component="PlaySkipBackOutline" />
-        </NButton>
-        <NButton circle type="primary" @click="playerStore.togglePlay" size="large">
-          <NIcon :component="playerStore.isPlaying ? PauseCircleOutline : PlayCircleOutline" />
-        </NButton>
-        <NButton circle type="primary" @click="playerStore.next">
-          <NIcon :component="PlaySkipForwardOutline" />
-        </NButton>
+        <!-- 主要播放控制按钮组 -->
+        <div class="main-controls">
+          <NButton circle type="primary" @click="playerStore.prev">
+            <NIcon :component="PlaySkipBackOutline" />
+          </NButton>
+          <NButton circle type="primary" @click="playerStore.togglePlay" size="large">
+            <NIcon :component="playerStore.isPlaying ? PauseCircleOutline : PlayCircleOutline" />
+          </NButton>
+          <NButton circle type="primary" @click="playerStore.next">
+            <NIcon :component="PlaySkipForwardOutline" />
+          </NButton>
+        </div>
+        
+        <!-- 播放模式切换按钮 -->
+        <div class="mode-control">
+          <NButton 
+            circle 
+            type="primary" 
+            @click="playerStore.togglePlayMode"
+            :title="playerStore.playMode === 'sequential' ? '顺序播放' : '随机播放'"
+          >
+            <NIcon :component="playerStore.playMode === 'sequential' ? RepeatOutline : ShuffleOutline" />
+          </NButton>
+        </div>
       </div>
       
+      <!-- 进度条 -->
       <div class="progress-bar">
         <span class="time-current">{{ formatTime(playerStore.currentTime) }}</span>
         <NSlider
           :value="progress"
-          @update:value="handleSeek"
+          @update:value="handleDragUpdate"
+          @dragstart="handleDragStart"
+          @dragend="handleDragEnd"
+          @click="handleSeek"
           class="progress-slider"
           :format-tooltip="(value) => formatTime((value / 100) * duration)"
         />
@@ -57,7 +76,16 @@
 import { ref, computed } from 'vue'
 import { usePlayerStore } from '../store/player'
 import { NButton, NSlider, NIcon } from 'naive-ui'
-import { PlayCircleOutline, PauseCircleOutline, PlaySkipBackOutline, PlaySkipForwardOutline, VolumeHighOutline, MusicalNotesOutline } from '@vicons/ionicons5'
+import { 
+  PlayCircleOutline, 
+  PauseCircleOutline, 
+  PlaySkipBackOutline, 
+  PlaySkipForwardOutline, 
+  VolumeHighOutline, 
+  MusicalNotesOutline,
+  RepeatOutline,
+  ShuffleOutline
+} from '@vicons/ionicons5'
 import { useRouter,useRoute } from 'vue-router'
 
 const playerStore = usePlayerStore()
@@ -65,6 +93,11 @@ const router = useRouter()
 const route = useRoute()
 const volume = ref(playerStore.volume * 100) // 转换为0-100范围
 
+// 拖动状态管理
+const isDragging = ref(false)
+const dragValue = ref(0)
+
+// 格式化时间为m:ss
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return '0:00'
   const mins = Math.floor(seconds / 60)
@@ -72,23 +105,53 @@ const formatTime = (seconds: number) => {
   return `${mins}:${secs.toString().padStart(2, '0')}`
 }
 
+// 计算进度条进度
 const progress = computed(() => {
-  if (!playerStore.currentSong || !playerStore.currentSong.howl) return 0
-  const duration = playerStore.currentSong.howl.duration()
+  // 如果正在拖动，返回正在拖动的值
+  if (isDragging.value) return dragValue.value
+
+  if (!playerStore.currentSong) return 0
+  
+  const duration = playerStore.currentSong.duration
   return (playerStore.currentTime / duration) * 100
 })
 
+// 计算总时长
 const duration = computed(() => {
-  if (!playerStore.currentSong || !playerStore.currentSong.howl) return 0
-  return playerStore.currentSong.howl.duration()
+  if (!playerStore.currentSong) return 0
+
+  return playerStore.currentSong.duration
 })
 
-const handleSeek = (value: number) => {
-  if (!playerStore.currentSong || !playerStore.currentSong.howl) return
-  const duration = playerStore.currentSong.howl.duration()
-  playerStore.seek((value / 100) * duration)
+// 拖动开始时的处理
+const handleDragStart = () => {
+  isDragging.value = true
 }
 
+// 拖动过程中
+const handleDragUpdate = (value: number) => {
+  if (isDragging.value) {
+    dragValue.value = value
+  }
+}
+
+// 拖动结束
+const handleDragEnd = () => {
+  if (isDragging.value && playerStore.currentSong && playerStore.currentSong.duration) {
+    const seekTime = (dragValue.value / 100) * playerStore.currentSong.duration
+    playerStore.seek(seekTime)
+  }
+  isDragging.value = false
+}
+
+// 进度条点击事件处理
+const handleSeek = (value: number) => {
+  if (!isDragging.value && playerStore.currentSong && playerStore.currentSong.duration) {
+    playerStore.seek((value / 100) * playerStore.currentSong.duration)
+  }
+}
+
+// 音量控制事件处理
 const handleVolumeChange = (value: number) => {
   playerStore.setVolume(value / 100) // 转换回0-1范围给store
 }
@@ -170,7 +233,18 @@ const showNowPlaying = () => {
 .control-buttons {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 32px; 
+}
+
+.main-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px; 
+}
+
+.mode-control {
+  display: flex;
+  align-items: center;
 }
 
 .progress-bar {

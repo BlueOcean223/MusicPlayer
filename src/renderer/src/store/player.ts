@@ -23,7 +23,9 @@ export const usePlayerStore = defineStore('player', {
     currentTime: 0,
     volume: 0.3,
     lyrics: null as string | null,
-    parsedLyrics: [] as {time: number, text: string}[]
+    parsedLyrics: [] as {time: number, text: string}[],
+    // 播放模式：'sequential' 顺序播放, 'random' 随机播放
+    playMode: 'sequential' as 'sequential' | 'random'
   }),
   
   actions: {
@@ -123,7 +125,7 @@ export const usePlayerStore = defineStore('player', {
             onend: () => {
               this.next()
             },
-            onloaderror: (id, error) => {
+            onloaderror: (_id, error) => {
               console.error('Error loading audio:', error)
               this.next()
             }
@@ -156,11 +158,35 @@ export const usePlayerStore = defineStore('player', {
       }
     },
     
+    // 切换播放模式
+    togglePlayMode() {
+      this.playMode = this.playMode === 'sequential' ? 'random' : 'sequential'
+      this.updateLocalCache()
+    },
+    
+    // 获取随机歌曲索引
+    getRandomIndex(currentIndex: number): number {
+      if (this.playlist.length <= 1) return currentIndex
+      
+      let randomIndex
+      do {
+        randomIndex = Math.floor(Math.random() * this.playlist.length)
+      } while (randomIndex === currentIndex && this.playlist.length > 1)
+      
+      return randomIndex
+    },
+    
     next() {
       if (!this.currentSong || this.playlist.length <= 1) return
       
       const currentIndex = this.playlist.findIndex(song => song.id === this.currentSong?.id)
-      const nextIndex = (currentIndex + 1) % this.playlist.length
+      let nextIndex
+      
+      if (this.playMode === 'random') {
+        nextIndex = this.getRandomIndex(currentIndex)
+      } else {
+        nextIndex = (currentIndex + 1) % this.playlist.length
+      }
       
       this.play(this.playlist[nextIndex])
     },
@@ -169,7 +195,13 @@ export const usePlayerStore = defineStore('player', {
       if (!this.currentSong || this.playlist.length <= 1) return
       
       const currentIndex = this.playlist.findIndex(song => song.id === this.currentSong?.id)
-      const prevIndex = (currentIndex - 1 + this.playlist.length) % this.playlist.length
+      let prevIndex
+      
+      if (this.playMode === 'random') {
+        prevIndex = this.getRandomIndex(currentIndex)
+      } else {
+        prevIndex = (currentIndex - 1 + this.playlist.length) % this.playlist.length
+      }
       
       this.play(this.playlist[prevIndex])
     },
@@ -335,7 +367,8 @@ export const usePlayerStore = defineStore('player', {
           currentTime,
           volume,
           lyrics,
-          parsedLyrics
+          parsedLyrics,
+          playMode
         } = JSON.parse(cache)
 
         this.playlist = playlist
@@ -345,6 +378,7 @@ export const usePlayerStore = defineStore('player', {
         this.volume = volume
         this.lyrics = lyrics
         this.parsedLyrics = parsedLyrics
+        this.playMode = playMode || 'sequential' // 默认顺序播放
       }
     },
 
@@ -357,7 +391,8 @@ export const usePlayerStore = defineStore('player', {
         currentTime: this.currentTime,
         volume: this.volume,
         lyrics: this.lyrics,
-        parsedLyrics: this.parsedLyrics
+        parsedLyrics: this.parsedLyrics,
+        playMode: this.playMode
       }
       localStorage.setItem('musicPlayerCache', JSON.stringify(cache))
     }
