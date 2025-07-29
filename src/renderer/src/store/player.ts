@@ -225,13 +225,15 @@ export const usePlayerStore = defineStore('player', {
         }
       }
     },
-    
+    // 调整音量
     setVolume(volume: number) {
       if (typeof volume === 'number' && volume >= 0 && volume <= 1) {
         this.volume = volume
         if (this.currentSong && this.currentSong.howl) {
           this.currentSong.howl.volume(volume)
         }
+        // 保存音量设置
+        this.updateLocalCache()
       }
     },
     
@@ -362,36 +364,41 @@ export const usePlayerStore = defineStore('player', {
       if (cache) {
         const {
           playlist,
-          currentSong,
-          isPlaying,
-          currentTime,
           volume,
-          lyrics,
-          parsedLyrics,
           playMode
         } = JSON.parse(cache)
 
-        this.playlist = playlist
-        this.currentSong = currentSong
-        this.isPlaying = isPlaying
-        this.currentTime = currentTime
+        // 恢复播放列表，为每首歌添加howl: null
+        this.playlist = playlist.map((song: any) => ({
+          ...song,
+          howl: null,
+          audioData: ''
+        }))
+        
         this.volume = volume
-        this.lyrics = lyrics
-        this.parsedLyrics = parsedLyrics
         this.playMode = playMode || 'sequential' // 默认顺序播放
       }
     },
 
     // 更新本地缓存
     updateLocalCache() {
+      // howl实例不能序列化，移除
+      // 移除 audioData 字段，其包含原始音频数据，过大,容易导致localStorage超配额
+      const serializablePlaylist = this.playlist.map(song => ({
+        id: song.id,
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+        duration: song.duration,
+        path: song.path,
+        albumArt: song.albumArt,
+        genre: song.genre,
+        year: song.year
+      }))
+      
       const cache = {
-        playlist: this.playlist,
-        currentSong: this.currentSong,
-        isPlaying: this.isPlaying,
-        currentTime: this.currentTime,
+        playlist: serializablePlaylist,
         volume: this.volume,
-        lyrics: this.lyrics,
-        parsedLyrics: this.parsedLyrics,
         playMode: this.playMode
       }
       localStorage.setItem('musicPlayerCache', JSON.stringify(cache))

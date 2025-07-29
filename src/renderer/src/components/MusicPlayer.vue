@@ -65,7 +65,6 @@
         :min="0"
         :max="100"
         :step="1"
-        @update:value="handleVolumeChange"
         class="volume-slider"
       />
     </div>
@@ -91,11 +90,19 @@ import { useRouter,useRoute } from 'vue-router'
 const playerStore = usePlayerStore()
 const router = useRouter()
 const route = useRoute()
-const volume = ref(playerStore.volume * 100) // 转换为0-100范围
+
 
 // 拖动状态管理
 const isDragging = ref(false)
 const dragValue = ref(0)
+
+// 计算音量
+const volume = computed({
+  get: () => playerStore.volume * 100,
+  set: (value: number) => {
+    playerStore.setVolume(value / 100)
+  }
+})
 
 // 格式化时间为m:ss
 const formatTime = (seconds: number) => {
@@ -149,11 +156,6 @@ const handleSeek = (value: number) => {
   if (!isDragging.value && playerStore.currentSong && playerStore.currentSong.duration) {
     playerStore.seek((value / 100) * playerStore.currentSong.duration)
   }
-}
-
-// 音量控制事件处理
-const handleVolumeChange = (value: number) => {
-  playerStore.setVolume(value / 100) // 转换回0-1范围给store
 }
 
 // 显示/关闭正在播放的歌曲页面
