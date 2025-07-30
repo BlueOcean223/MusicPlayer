@@ -61,4 +61,22 @@ onMounted(() => {
   width: 100%;
   height: 100vh;
 }
+
+/* 去除所有元素的focus outline */
+* {
+  outline: none !important;
+}
+
+/* 去除按钮的focus样式 */
+button:focus,
+button:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* 去除输入框的focus样式 */
+input:focus,
+textarea:focus {
+  outline: none !important;
+}
 </style>

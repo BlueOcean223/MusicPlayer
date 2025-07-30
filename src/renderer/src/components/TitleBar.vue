@@ -44,7 +44,6 @@ import { RemoveOutline, CropOutline, CloseOutline } from '@vicons/ionicons5'
 
 // 窗口控制函数
 const minimizeWindow = () => {
-  console.log('Minimize clicked')
   if (window.windowControl) {
     window.windowControl.minimize()
   } else {
@@ -53,7 +52,6 @@ const minimizeWindow = () => {
 }
 
 const maximizeWindow = () => {
-  console.log('Maximize clicked')
   if (window.windowControl) {
     window.windowControl.maximize()
   } else {
@@ -62,7 +60,6 @@ const maximizeWindow = () => {
 }
 
 const closeWindow = () => {
-  console.log('Close clicked')
   if (window.windowControl) {
     window.windowControl.close()
   } else {

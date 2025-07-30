@@ -1,12 +1,16 @@
 {
   "name": "musicplayer",
   "private": true,
-  "version": "1.0",
+  "version": "1.0.0",
+  "description": "A Music Player",
+  "author": "blueOcean",
   "type": "module",
+  "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
-    "preview": "electron-vite preview"
+    "preview": "electron-vite preview",
+    "build:win": "electron-vite build && electron-builder --win"
   },
   "dependencies": {
     "@vicons/ionicons5": "^0.13.0",
@@ -31,6 +35,5 @@
     "vite-plugin-electron": "^0.28.6",
     "vite-plugin-electron-renderer": "^0.14.5",
     "vue-tsc": "^2.0.26"
-  },
-  "main": "out/main/index.js"
+  }
 }

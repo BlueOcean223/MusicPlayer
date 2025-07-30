@@ -25,13 +25,12 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: false, // 禁用沙箱
+      devTools: !app.isPackaged, // 生产环境禁用开发者工具
     },
   })
 
-  // Test active push message to Renderer-process.
-  win.webContents.on('did-finish-load', () => {
-    win?.webContents.send('main-process-message', (new Date).toLocaleString())
-  })
+  // 配置生产环境安全设置
+  setupProductionSecurity(win)
 
   if (!app.isPackaged) {
     win.loadURL("http://localhost:5173")
@@ -39,6 +38,31 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '../../out/renderer/index.html'))
   }
+}
+
+// 配置生产环境安全设置
+function setupProductionSecurity (window: BrowserWindow) {
+  if (!app.isPackaged) return
+
+  // 禁用快捷键
+  window.webContents.on('before-input-event', (event,input) => {
+    // 禁用F12(开发者工具)
+    if (input.key === 'F12') {
+      event.preventDefault()
+    }
+    // 禁用 Ctrl+Shift+I (开发者工具)
+    if (input.control && input.shift && input.key === 'I') {
+      event.preventDefault()
+    }
+    // 禁用 Ctrl+R 和 F5 (刷新)
+    if ((input.control && input.key === 'r') || input.key === 'F5') {
+      event.preventDefault()
+    }
+    // 禁用 Ctrl+Shift+R (强制刷新)
+    if (input.control && input.shift && input.key === 'R') {
+      event.preventDefault()
+    }
+  })
 }
 
 // 处理选择音乐文件

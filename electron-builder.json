@@ -1,22 +1,18 @@
-// @see - https://www.electron.build/configuration/configuration
 {
   "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.music.player",
   "asar": true,
-  "productName": "YourAppName",
+  "productName": "MusicPlayer",
   "directories": {
     "output": "release/${version}"
   },
   "files": [
     "dist",
-    "dist-electron"
+    "dist-electron",
+    "out/renderer",
+    "out/main",
+    "out/preload"
   ],
-  "mac": {
-    "target": [
-      "dmg"
-    ],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
-  },
   "win": {
     "target": [
       {
@@ -26,6 +22,7 @@
         ]
       }
     ],
+    "icon": "./public/music.ico",
     "artifactName": "${productName}-Windows-${version}-Setup.${ext}"
   },
   "nsis": {
@@ -33,11 +30,5 @@
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
     "deleteAppDataOnUninstall": false
-  },
-  "linux": {
-    "target": [
-      "AppImage"
-    ],
-    "artifactName": "${productName}-Linux-${version}.${ext}"
   }
 }

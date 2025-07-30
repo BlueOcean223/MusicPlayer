@@ -1,18 +1,31 @@
-# Vue 3 + TypeScript + Vite
+# MusicPlayer
+一个基于Elctron-vite+Vue3构建的本地音乐播放器
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+效果演示
+![image1](./public/img1.png)
 
-## Recommended IDE Setup
+![image2](./public/img2.png)
 
-- [VS Code](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur) + [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin).
+![image3](./public/img3.png)
 
-## Type Support For `.vue` Imports in TS
+在MusicPlayer中，你可以导入自己的本地音乐。
+并按照你的喜好来移动歌曲在列表中的顺序。
+在播放时可以选择随机播放与顺序播放。
+> 温馨提示：歌词需要在联网状态下才能加载
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin) to make the TypeScript language service aware of `.vue` types.
+# 快速开始
 
-If the standalone TypeScript plugin doesn't feel fast enough to you, Volar has also implemented a [Take Over Mode](https://github.com/johnsoncodehk/volar/discussions/471#discussioncomment-1361669) that is more performant. You can enable it by the following steps:
+安装依赖
+```bash
+npm install
+```
 
-1. Disable the built-in TypeScript Extension
-   1. Run `Extensions: Show Built-in Extensions` from VSCode's command palette
-   2. Find `TypeScript and JavaScript Language Features`, right click and select `Disable (Workspace)`
-2. Reload the VSCode window by running `Developer: Reload Window` from the command palette.
+运行
+```bash
+npm run dev
+```
+
+## 打包
+```bash
+npm run build:win
+```
