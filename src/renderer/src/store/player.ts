@@ -358,6 +358,21 @@ export const usePlayerStore = defineStore('player', {
       this.updateLocalCache()
     },
 
+    // 重排序播放列表
+    reorderPlaylist(fromIndex: number, toIndex: number) {
+      if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || 
+          fromIndex >= this.playlist.length || toIndex >= this.playlist.length) {
+        return
+      }
+      
+      // 移动歌曲
+      const [movedSong] = this.playlist.splice(fromIndex, 1)
+      this.playlist.splice(toIndex, 0, movedSong)
+      
+      // 更新本地缓存
+      this.updateLocalCache()
+    },
+
     // 使用本地缓存初始化
     initFromLocalCache() {
       const cache = localStorage.getItem('musicPlayerCache')

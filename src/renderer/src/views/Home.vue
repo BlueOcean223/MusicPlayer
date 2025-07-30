@@ -41,9 +41,16 @@
           v-for="(song, index) in playerStore.playlist" 
           :key="song.id"
           class="track-item"
-          :class="{ 'active': playerStore.currentSong?.id === song.id, 'manage-mode': isManageMode }"
+          :class="{ 'active': playerStore.currentSong?.id === song.id, 'manage-mode': isManageMode, 'dragging': draggedIndex === index }"
           @click="!isManageMode && playSong(song)"
           @dblclick="!isManageMode && playSong(song)"
+          draggable="true"
+          @dragstart="handleDragStart(index, $event)"
+          @dragover="handleDragOver($event)"
+          @dragenter="handleDragEnter(index, $event)"
+          @dragleave="handleDragLeave($event)"
+          @drop="handleDrop(index, $event)"
+          @dragend="handleDragEnd"
         >
           <span class="track-number">{{ index + 1 }}</span>
           <div class="track-info">
@@ -119,6 +126,10 @@ import {
 const playerStore = usePlayerStore()
 const isManageMode = ref(false)
 
+// 拖拽相关状态
+const draggedIndex = ref<number | null>(null)
+const dragOverIndex = ref<number | null>(null)
+
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return '0:00'
   const mins = Math.floor(seconds / 60)
@@ -154,6 +165,54 @@ const clearAllSongs = () => {
     playerStore.clearPlaylist()
     isManageMode.value = false
   }
+}
+
+// 拖拽事件处理
+const handleDragStart = (index: number, event: DragEvent) => {
+  draggedIndex.value = index
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', index.toString())
+  }
+}
+// 拖拽悬停事件处理
+const handleDragOver = (event: DragEvent) => {
+  event.preventDefault()
+  if (event.dataTransfer) {
+    event.dataTransfer.dropEffect = 'move'
+  }
+}
+// 拖拽进入事件处理
+const handleDragEnter = (index: number, event: DragEvent) => {
+  event.preventDefault()
+  dragOverIndex.value = index
+}
+// 拖拽离开事件处理
+const handleDragLeave = (event: DragEvent) => {
+  // 只有当离开整个元素时才清除dragOverIndex
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const x = event.clientX
+  const y = event.clientY
+  
+  if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+    dragOverIndex.value = null
+  }
+}
+// 拖拽放置事件处理
+const handleDrop = (toIndex: number, event: DragEvent) => {
+  event.preventDefault()
+  
+  if (draggedIndex.value !== null && draggedIndex.value !== toIndex) {
+    playerStore.reorderPlaylist(draggedIndex.value, toIndex)
+  }
+  
+  draggedIndex.value = null
+  dragOverIndex.value = null
+}
+// 拖拽结束事件处理
+const handleDragEnd = () => {
+  draggedIndex.value = null
+  dragOverIndex.value = null
 }
 </script>
 
@@ -229,6 +288,7 @@ const clearAllSongs = () => {
   cursor: pointer;
   transition: all 0.2s;
   margin-bottom: 4px;
+  user-select: none;
 }
 
 .track-item:not(.manage-mode) {
@@ -245,6 +305,19 @@ const clearAllSongs = () => {
 
 .track-item.active {
   background: #188f41;
+}
+
+.track-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+.track-item[draggable="true"] {
+  cursor: grab;
+}
+
+.track-item[draggable="true"]:active {
+  cursor: grabbing;
 }
 
 .track-info {
