@@ -35,8 +35,8 @@ export const usePlayerStore = defineStore('player', {
     volume: 0.3,
     lyrics: null as string | null,
     parsedLyrics: [] as { time: number, text: string }[],
-    // 播放模式：'sequential' 顺序播放, 'random' 随机播放
-    playMode: 'sequential' as 'sequential' | 'random'
+    // 播放模式：'sequential' 顺序播放, 'random' 随机播放, 'single' 单曲循环
+    playMode: 'sequential' as 'sequential' | 'random' | 'single'
   }),
 
   actions: {
@@ -134,7 +134,19 @@ export const usePlayerStore = defineStore('player', {
               this.currentTime = 0
             },
             onend: () => {
-              this.next()
+              // 自动播放结束时的逻辑
+              if (this.playMode === 'single') {
+                // 单曲循环：重置播放位置到开始并重新播放
+                if (this.currentSong && this.currentSong.howl) {
+                  this.currentSong.howl.seek(0)
+                  this.currentSong.howl.play()
+                  this.currentTime = 0
+                  // 确保歌词数据存在
+                  this.loadLyrics()
+                }
+              } else {
+                this.next()
+              }
             },
             onloaderror: (_id, error) => {
               console.error('Error loading audio:', error)
@@ -171,7 +183,14 @@ export const usePlayerStore = defineStore('player', {
 
     // 切换播放模式
     togglePlayMode() {
-      this.playMode = this.playMode === 'sequential' ? 'random' : 'sequential'
+      // 顺序 -> 随机 -> 单曲 -> 顺序
+      if (this.playMode === 'sequential') {
+        this.playMode = 'random'
+      } else if (this.playMode === 'random') {
+        this.playMode = 'single'
+      } else {
+        this.playMode = 'sequential'
+      }
       this.updateLocalCache()
     },
 
@@ -196,6 +215,7 @@ export const usePlayerStore = defineStore('player', {
       if (this.playMode === 'random') {
         nextIndex = this.getRandomIndex(currentIndex)
       } else {
+        // 顺序播放和单曲循环下，手动点击下一首都是去下一首
         nextIndex = (currentIndex + 1) % this.playlist.length
       }
 
@@ -211,6 +231,7 @@ export const usePlayerStore = defineStore('player', {
       if (this.playMode === 'random') {
         prevIndex = this.getRandomIndex(currentIndex)
       } else {
+        // 顺序播放和单曲循环下，手动点击上一首都是去上一首
         prevIndex = (currentIndex - 1 + this.playlist.length) % this.playlist.length
       }
 

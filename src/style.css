@@ -1,11 +1,37 @@
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+  /* Font Family */
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  
+  /* Theme Colors - Green Tone refined */
+  --primary-color: #1DB954;
+  --primary-hover: #1ed760;
+  --primary-active: #169c46;
+  
+  /* Backgrounds */
+  --bg-dark: #121212;
+  --bg-dark-secondary: #000000;
+  
+  /* Text Colors */
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-disabled: rgba(255, 255, 255, 0.38);
+  
+  /* Glassmorphism Variables */
+  --glass-surface: rgba(255, 255, 255, 0.05);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: 16px;
+  --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  
+  /* Layout */
+  --header-height: 48px;
+  --footer-height: 90px;
+  
+  /* Global Defaults */
+  line-height: 1.6;
   font-weight: 400;
-
   color-scheme: dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #121212;
+  color: var(--text-primary);
+  background-color: var(--bg-dark);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -13,13 +39,9 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #aaa;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #fff;
+/* Reset & Base */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
 body {
@@ -30,35 +52,11 @@ body {
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background-color: #121212;
-  color: #fff;
-}
-
-h1 {
-  font-size: 2.2em;
-  line-height: 1.1;
-  margin: 0;
-}
-
-button {
-  border-radius: 4px;
-  border: 1px solid #333;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #333;
-  color: #fff;
-  cursor: pointer;
-  transition: all 0.25s;
-}
-button:hover {
-  border-color: #555;
-  background-color: #444;
-}
-button:focus,
-button:focus-visible {
-  outline: 2px auto #555;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  /* Subtle gradient background for the whole app */
+  background-image: radial-gradient(circle at 10% 20%, rgba(29, 185, 84, 0.1) 0%, transparent 40%),
+                    radial-gradient(circle at 90% 80%, rgba(100, 100, 255, 0.05) 0%, transparent 40%);
 }
 
 #app {
@@ -66,24 +64,52 @@ button:focus-visible {
   height: 100vh;
   margin: 0;
   padding: 0;
-  text-align: left;
-  background-color: #121212;
 }
 
+/* Scrollbar Styling */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #222;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #444;
+  background: rgba(255, 255, 255, 0.2);
   border-radius: 4px;
+  border: 2px solid transparent; /* Padding around thumb */
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background-color: rgba(255, 255, 255, 0.3);
 }
+
+/* Naive UI Overrides for consistent look */
+.n-button {
+  border-radius: 8px !important;
+}
+
+/* Smooth Focus Removal */
+button:focus,
+button:active,
+input:focus,
+textarea:focus,
+* {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+

@@ -31,36 +31,41 @@ onMounted(() => {
 </script>
 
 <style>
+
 .app-container {
   height: 100vh;
   width: 100%;
   display: flex;
   flex-direction: column;
+  background: transparent; /* Changed to transparent to show body gradient */
+  position: relative;
 }
 
 .app-header {
   flex-shrink: 0;
   z-index: 100;
+  /* Header specific glass effect can be added in TitleBar, but ensuring container is safe */
 }
 
 .app-content {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  position: relative;
+  z-index: 1; 
+  padding-bottom: calc(var(--footer-height) + 20px);
 }
 
 .app-footer {
   flex-shrink: 0;
   z-index: 100;
+  /* Floating effect */
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
 }
 
-#app {
-  max-width: none;
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100vh;
-}
 
 /* 去除所有元素的focus outline */
 * {
