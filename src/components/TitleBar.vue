@@ -40,7 +40,8 @@
 <script setup lang="ts">
 import { NButton, NIcon, NSpace } from 'naive-ui'
 import { RemoveOutline, CropOutline, CloseOutline } from '@vicons/ionicons5'
-import { appWindow } from '@tauri-apps/api/window'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+const appWindow = getCurrentWebviewWindow()
 
 
 // 窗口控制函数

@@ -183,7 +183,7 @@ import {
   ArrowUpOutline,
   ArrowDownOutline
 } from '@vicons/ionicons5'
-import { invoke } from '@tauri-apps/api/tauri'
+import { invoke } from '@tauri-apps/api/core'
 
 const playerStore = usePlayerStore()
 const isManageMode = ref(false)

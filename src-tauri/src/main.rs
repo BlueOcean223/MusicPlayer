@@ -8,8 +8,8 @@ use lofty::{Accessor, AudioFile, Probe, TaggedFileExt};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use tauri::api::dialog::FileDialogBuilder;
-use tauri::{command, Window};
+use tauri::command;
+use tauri_plugin_dialog::DialogExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MusicMetadata {
@@ -25,28 +25,24 @@ pub struct MusicMetadata {
 
 // 打开文件选择对话框
 #[command]
-async fn open_music_files(window: Window) -> Result<Vec<String>, String> {
-    let (sender, receiver) = std::sync::mpsc::channel();
-
-    FileDialogBuilder::new()
+async fn open_music_files(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let files = app
+        .dialog()
+        .file()
         .add_filter(
             "Music Files",
             &["mp3", "wav", "flac", "ogg", "m4a", "aac", "wma"],
         )
-        .set_parent(&window)
-        .pick_files(move |file_paths| {
-            let paths = file_paths
-                .map(|paths| {
-                    paths
-                        .into_iter()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .collect()
-                })
-                .unwrap_or_else(Vec::new);
-            let _ = sender.send(paths);
-        });
+        .blocking_pick_files();
 
-    receiver.recv().map_err(|e| e.to_string())
+    match files {
+        Some(paths) => Ok(paths
+            .into_iter()
+            .filter_map(|p| p.into_path().ok())
+            .map(|p| p.to_string_lossy().to_string())
+            .collect()),
+        None => Ok(Vec::new()),
+    }
 }
 
 // 读取文件并返回base64编码
@@ -81,7 +77,9 @@ async fn parse_music_metadata(file_path: String) -> Result<MusicMetadata, String
     let duration = properties.duration().as_secs_f64();
 
     // 获取标签信息
-    let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
+    let tag = tagged_file
+        .primary_tag()
+        .or_else(|| tagged_file.first_tag());
 
     let (title, artist, album, genre, year) = if let Some(tag) = tag {
         (
@@ -103,7 +101,9 @@ async fn parse_music_metadata(file_path: String) -> Result<MusicMetadata, String
         .to_string();
 
     // 提取专辑封面
-    let album_art = if let Some(tag) = tagged_file.primary_tag().or_else(|| tagged_file.first_tag())
+    let album_art = if let Some(tag) = tagged_file
+        .primary_tag()
+        .or_else(|| tagged_file.first_tag())
     {
         tag.pictures().first().map(|pic| {
             let mime = pic.mime_type().map(|m| m.as_str()).unwrap_or("image/jpeg");
@@ -140,7 +140,10 @@ async fn read_lyrics(
 
     // 1. 尝试读取内嵌歌词
     if let Ok(tagged_file) = Probe::open(path).and_then(|p| p.read()) {
-        if let Some(tag) = tagged_file.primary_tag().or_else(|| tagged_file.first_tag()) {
+        if let Some(tag) = tagged_file
+            .primary_tag()
+            .or_else(|| tagged_file.first_tag())
+        {
             // 检查是否有 LYRICS 帧
             for item in tag.items() {
                 if let lofty::ItemKey::Lyrics = item.key() {
@@ -256,7 +259,10 @@ async fn fetch_lyrics_from_qq(title: &str, artist: &str) -> Result<Option<String
 
     let search_response = client
         .get(&search_url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
         .header("Referer", "https://y.qq.com/")
         .timeout(std::time::Duration::from_secs(10))
         .send()
@@ -291,7 +297,10 @@ async fn fetch_lyrics_from_qq(title: &str, artist: &str) -> Result<Option<String
 
     let lyrics_response = client
         .get(&lyrics_url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        )
         .header("Referer", "https://y.qq.com/")
         .timeout(std::time::Duration::from_secs(10))
         .send()
@@ -313,6 +322,8 @@ async fn fetch_lyrics_from_qq(title: &str, artist: &str) -> Result<Option<String
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![
             open_music_files,
             read_file,

@@ -13,7 +13,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tauri-apps/api": "^1.5.0",
+    "@tauri-apps/api": "^2.9.1",
+    "@tauri-apps/plugin-dialog": "^2.4.2",
+    "@tauri-apps/plugin-http": "^2.5.4",
     "@vicons/ionicons5": "^0.13.0",
     "@vueuse/core": "^13.5.0",
     "howler": "^2.2.4",
@@ -24,7 +26,7 @@
     "vue-router": "^4.5.1"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^1.5.0",
+    "@tauri-apps/cli": "^2.9.5",
     "@types/howler": "^2.2.12",
     "@vitejs/plugin-vue": "^5.0.4",
     "typescript": "^5.2.2",

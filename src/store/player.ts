@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { Howl } from 'howler'
-import { invoke } from '@tauri-apps/api/tauri'
+import { invoke } from '@tauri-apps/api/core'
 
 interface Song {
   id: string;
