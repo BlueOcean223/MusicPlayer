@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { Howl } from 'howler'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 
 interface Song {
   id: string;
@@ -9,11 +9,11 @@ interface Song {
   album: string;
   duration: number;
   path: string;
-  audioData?: string; // 添加音频数据字段
   howl: Howl | null;
   albumArt?: string;
   genre?: string;
   year?: number;
+  playSrc?: string;
 }
 
 interface MusicMetadata {
@@ -36,13 +36,29 @@ export const usePlayerStore = defineStore('player', {
     lyrics: null as string | null,
     parsedLyrics: [] as { time: number, text: string }[],
     // 播放模式：'sequential' 顺序播放, 'random' 随机播放, 'single' 单曲循环
-    playMode: 'sequential' as 'sequential' | 'random' | 'single'
+    playMode: 'sequential' as 'sequential' | 'random' | 'single',
+    // 播放错误信息
+    playError: null as string | null
   }),
 
   actions: {
     async addSongs(paths: string[]) {
-      for (const path of paths) {
+      const addedCount = { success: 0, duplicate: 0, failed: 0 }
+
+      // 统一路径分隔符并去重输入列表，防止同一次批量导入重复
+      const normalizedPaths = Array.from(new Set(paths.map(p => p.replace(/\\/g, '/'))))
+      
+      for (const rawPath of normalizedPaths) {
+        const path = rawPath
         try {
+          // 检查是否已存在相同路径的歌曲（去重）
+          const existingSong = this.playlist.find(song => song.path === path)
+          if (existingSong) {
+            addedCount.duplicate++
+            console.log(`歌曲已存在，跳过: ${path}`)
+            continue
+          }
+          
           // 解析音乐元数据
           const metadata = await invoke<MusicMetadata>('parse_music_metadata', { filePath: path })
 
@@ -61,109 +77,226 @@ export const usePlayerStore = defineStore('player', {
             }
 
             this.playlist.push(song)
+            addedCount.success++
             // 保存到本地缓存
             this.updateLocalCache()
           }
         } catch (error) {
+          addedCount.failed++
           console.error('Error adding song:', error)
         }
       }
+      
+      // 返回添加结果信息
+      return addedCount
     },
 
     async play(song?: Song) {
-      if (song) {
-        // 如果指定了歌曲，播放该歌曲
-        if (this.currentSong && this.currentSong.howl) {
-          this.currentSong.howl.stop()
-        }
+      const targetSong = song || this.currentSong || this.playlist[0]
+      if (!targetSong) return
 
-        this.currentSong = song
-      } else if (!this.currentSong && this.playlist.length > 0) {
-        // 如果没有当前歌曲但有播放列表，播放第一首
-        this.currentSong = this.playlist[0]
+      // 停止并卸载上一首，避免残留状态
+      if (this.currentSong?.howl) {
+        this.currentSong.howl.stop()
+        this.currentSong.howl.unload()
       }
 
-      if (!this.currentSong) return
+      this.currentSong = targetSong
+      this.currentTime = 0
+      const currentId = this.currentSong.id
 
-      // 如果当前歌曲没有howl实例，创建一个
-      if (!this.currentSong.howl) {
-        try {
-          // 如果没有音频数据，先读取文件
-          if (!this.currentSong.audioData) {
-            const base64Data = await invoke<string>('read_file', { filePath: this.currentSong.path })
-            if (!base64Data) {
-              console.error('无法读取音频文件')
-              return
+      try {
+        const playablePath = await invoke<string>('ensure_playable_file', { filePath: this.currentSong.path })
+        const ext = playablePath.split('.').pop()?.toLowerCase() || 'mp3'
+        const fileSrc = convertFileSrc(playablePath)
+        this.currentSong.playSrc = fileSrc
+        let triedDataFallback = false
+
+        const buildHowl = (sources: string[], fmt: string) => new Howl({
+          src: sources,
+          html5: false, // 优先使用 WebAudio，避免自定义协议在 audio 标签上受限
+          volume: this.volume,
+          format: [fmt],
+          onload: () => {
+            if (!this.currentSong || this.currentSong.id !== currentId) return
+            const realDuration = this.currentSong?.howl?.duration()
+            if (realDuration && !isNaN(realDuration)) {
+              this.currentSong!.duration = realDuration
             }
-
-            // 根据文件扩展名确定MIME类型
-            const ext = this.currentSong.path.split('.').pop()?.toLowerCase()
-            let mimeType = 'audio/mpeg' // 默认MP3
-
-            switch (ext) {
-              case 'wav':
-                mimeType = 'audio/wav'
-                break
-              case 'flac':
-                mimeType = 'audio/flac'
-                break
-              case 'ogg':
-                mimeType = 'audio/ogg'
-                break
-              case 'm4a':
-                mimeType = 'audio/mp4'
-                break
-            }
-
-            this.currentSong.audioData = `data:${mimeType};base64,${base64Data}`
-          }
-
-          this.currentSong.howl = new Howl({
-            src: [this.currentSong.audioData],
-            html5: true,
-            volume: this.volume,
-            onplay: () => {
-              this.isPlaying = true
-              this.updateTime()
-            },
-            onpause: () => {
-              this.isPlaying = false
-            },
-            onstop: () => {
-              this.isPlaying = false
-              this.currentTime = 0
-            },
-            onend: () => {
-              // 自动播放结束时的逻辑
-              if (this.playMode === 'single') {
-                // 单曲循环：重置播放位置到开始并重新播放
-                if (this.currentSong && this.currentSong.howl) {
-                  this.currentSong.howl.seek(0)
-                  this.currentSong.howl.play()
-                  this.currentTime = 0
-                  // 确保歌词数据存在
-                  this.loadLyrics()
-                }
-              } else {
-                this.next()
+          },
+          onplay: () => {
+            if (!this.currentSong || this.currentSong.id !== currentId) return
+            this.isPlaying = true
+            this.playError = null
+            this.updateTime()
+          },
+          onpause: () => {
+            if (!this.currentSong || this.currentSong.id !== currentId) return
+            this.isPlaying = false
+          },
+          onstop: () => {
+            if (!this.currentSong || this.currentSong.id !== currentId) return
+            this.isPlaying = false
+            this.currentTime = 0
+          },
+          onend: () => {
+            if (!this.currentSong || this.currentSong.id !== currentId) return
+            if (this.playMode === 'single') {
+              if (this.currentSong && this.currentSong.howl) {
+                this.currentSong.howl.seek(0)
+                this.currentSong.howl.play()
+                this.currentTime = 0
+                this.loadLyrics()
               }
-            },
-            onloaderror: (_id, error) => {
-              console.error('Error loading audio:', error)
+            } else {
               this.next()
             }
-          })
-        } catch (error) {
-          console.error('创建音频实例失败:', error)
-          return
-        }
+          },
+          onloaderror: async (_id, error) => {
+            console.error('Error loading audio:', error, this.currentSong?.title)
+            if (!this.currentSong || this.currentSong.id !== currentId) return
+            if (!triedDataFallback) {
+              triedDataFallback = true
+              await this.fallbackToDataUrl(playablePath, ext, currentId)
+              return
+            }
+            const errorMsg = `无法播放: ${this.currentSong?.title || '未知歌曲'}`
+            this.playError = errorMsg
+            this.isPlaying = false
+          },
+          onplayerror: async (_id, error) => {
+            console.error('Error playing audio:', error, this.currentSong?.title)
+            if (!this.currentSong || this.currentSong.id !== currentId) return
+            if (!triedDataFallback) {
+              triedDataFallback = true
+              await this.fallbackToDataUrl(playablePath, ext, currentId)
+              return
+            }
+            const errorMsg = `播放错误: ${this.currentSong?.title || '未知歌曲'}`
+            this.playError = errorMsg
+            this.isPlaying = false
+            if (this.currentSong?.howl) {
+              this.currentSong.howl.once('unlock', () => {
+                this.currentSong?.howl?.play()
+              })
+            }
+          }
+        })
+
+        // 清除之前的错误状态
+        this.playError = null
+
+        this.currentSong.howl = buildHowl([fileSrc], ext)
+      } catch (error) {
+        console.error('创建音频实例失败:', error)
+        this.playError = `创建音频失败: ${this.currentSong?.title || '未知歌曲'}`
+        return
       }
 
-      this.currentSong.howl.play()
-      this.isPlaying = true
+      try {
+        this.currentSong.howl?.play()
+        this.isPlaying = true
+        // 加载歌词
+        this.loadLyrics()
+      } catch (error) {
+        console.error('播放失败:', error)
+        this.playError = `播放失败: ${this.currentSong?.title || '未知歌曲'}`
+        this.isPlaying = false
+      }
+    },
 
-      // 加载歌词
-      this.loadLyrics()
+    // 若自定义协议播放失败，回退为 data URL（兼容性更高）
+    async fallbackToDataUrl(playablePath: string, ext: string, songId: string) {
+      if (!this.currentSong || this.currentSong.id !== songId) return
+      try {
+        const base64Data = await invoke<string>('read_file', { filePath: playablePath })
+        if (!base64Data) {
+          this.playError = `无法读取音频文件: ${this.currentSong?.title || '未知歌曲'}`
+          return
+        }
+
+        const mimeMap: Record<string, string> = {
+          mp3: 'audio/mpeg',
+          wav: 'audio/wav',
+          flac: 'audio/flac',
+          ogg: 'audio/ogg',
+          oga: 'audio/ogg',
+          m4a: 'audio/mp4',
+          aac: 'audio/aac',
+          wma: 'audio/x-ms-wma',
+          webm: 'audio/webm',
+          opus: 'audio/opus'
+        }
+        const mimeType = mimeMap[ext] || 'audio/mpeg'
+        const dataSrc = `data:${mimeType};base64,${base64Data}`
+
+        if (!this.currentSong || this.currentSong.id !== songId) return
+
+        if (this.currentSong.howl) {
+          this.currentSong.howl.stop()
+          this.currentSong.howl.unload()
+        }
+
+        this.currentSong.playSrc = dataSrc
+        this.currentSong.howl = new Howl({
+          src: [dataSrc],
+          html5: false,
+          volume: this.volume,
+          format: [ext],
+          onload: () => {
+            if (!this.currentSong || this.currentSong.id !== songId) return
+            const realDuration = this.currentSong?.howl?.duration()
+            if (realDuration && !isNaN(realDuration)) {
+              this.currentSong.duration = realDuration
+            }
+          },
+          onplay: () => {
+            if (!this.currentSong || this.currentSong.id !== songId) return
+            this.isPlaying = true
+            this.playError = null
+            this.updateTime()
+          },
+          onpause: () => { if (this.currentSong && this.currentSong.id === songId) this.isPlaying = false },
+          onstop: () => {
+            if (!this.currentSong || this.currentSong.id !== songId) return
+            this.isPlaying = false
+            this.currentTime = 0
+          },
+          onend: () => {
+            if (!this.currentSong || this.currentSong.id !== songId) return
+            if (this.playMode === 'single') {
+              if (this.currentSong && this.currentSong.howl) {
+                this.currentSong.howl.seek(0)
+                this.currentSong.howl.play()
+                this.currentTime = 0
+                this.loadLyrics()
+              }
+            } else {
+              this.next()
+            }
+          },
+          onloaderror: (_id, error) => {
+            console.error('Fallback load error:', error)
+            if (!this.currentSong || this.currentSong.id !== songId) return
+            this.playError = `无法播放: ${this.currentSong?.title || '未知歌曲'}`
+            this.isPlaying = false
+          },
+          onplayerror: (_id, error) => {
+            console.error('Fallback play error:', error)
+            if (!this.currentSong || this.currentSong.id !== songId) return
+            this.playError = `播放错误: ${this.currentSong?.title || '未知歌曲'}`
+            this.isPlaying = false
+          }
+        })
+
+        if (this.currentSong?.id === songId) {
+          this.currentSong.howl?.play()
+        }
+      } catch (e) {
+        console.error('回退为 data URL 失败:', e)
+        this.playError = `播放失败: ${this.currentSong?.title || '未知歌曲'}`
+        this.isPlaying = false
+      }
     },
 
     pause() {
@@ -239,8 +372,9 @@ export const usePlayerStore = defineStore('player', {
     },
 
     updateTime() {
-      if (this.currentSong && this.currentSong.howl && this.isPlaying) {
-        const currentTime = this.currentSong.howl.seek() as number
+      const howl = this.currentSong?.howl
+      if (howl && howl.playing()) {
+        const currentTime = howl.seek() as number
         if (typeof currentTime === 'number' && !isNaN(currentTime)) {
           this.currentTime = currentTime
         }
@@ -300,23 +434,57 @@ export const usePlayerStore = defineStore('player', {
 
       // 解析LRC格式歌词
       const lines = lyrics.split('\n')
-      const timeRegex = /\[(\d+):(\d+)\.(\d+)\]/
+      // 改进的正则表达式，支持多种时间格式：
+      // [mm:ss.xx] - 标准格式，毫秒两位数
+      // [mm:ss.xxx] - 毫秒三位数
+      // [mm:ss:xx] - 使用冒号分隔毫秒
+      // [mm:ss] - 无毫秒
+      const timeRegex = /\[(\d+):(\d+)(?:[.:]+(\d+))?\]/g
 
-      const parsedLines = []
+      const parsedLines: { time: number; text: string }[] = []
 
       for (const line of lines) {
-        const match = timeRegex.exec(line)
-        if (match) {
-          const minutes = parseInt(match[1], 10)
-          const seconds = parseInt(match[2], 10)
-          const milliseconds = parseInt(match[3], 10)
-
-          if (!isNaN(minutes) && !isNaN(seconds) && !isNaN(milliseconds)) {
-            const time = minutes * 60 + seconds + milliseconds / 1000
-            const text = line.replace(timeRegex, '').trim()
-
-            if (text) {
-              parsedLines.push({ time, text })
+        // 跳过元数据标签 [ti:] [ar:] [al:] 等
+        if (/^\[[a-zA-Z]+:/.test(line)) {
+          continue
+        }
+        
+        // 重置正则表达式的lastIndex
+        timeRegex.lastIndex = 0
+        
+        // 提取所有时间标签
+        const matches: RegExpExecArray[] = []
+        let match: RegExpExecArray | null
+        while ((match = timeRegex.exec(line)) !== null) {
+          matches.push([...match] as unknown as RegExpExecArray)
+        }
+        
+        if (matches.length > 0) {
+          // 提取歌词文本（移除所有时间标签）
+          const text = line.replace(/\[\d+:\d+(?:[.:]+\d+)?\]/g, '').trim()
+          
+          if (text) {
+            // 为每个时间标签创建一个条目
+            for (const m of matches) {
+              const minutes = parseInt(m[1], 10)
+              const seconds = parseInt(m[2], 10)
+              const msStr = m[3] || '0'
+              
+              // 处理毫秒，根据位数决定如何计算
+              let milliseconds = parseInt(msStr, 10)
+              if (msStr.length === 2) {
+                // 两位数毫秒格式 (xx -> 0.xx秒)
+                milliseconds = milliseconds * 10
+              } else if (msStr.length === 1) {
+                // 单位数毫秒格式
+                milliseconds = milliseconds * 100
+              }
+              // 三位数保持原样
+              
+              if (!isNaN(minutes) && !isNaN(seconds) && !isNaN(milliseconds)) {
+                const time = minutes * 60 + seconds + milliseconds / 1000
+                parsedLines.push({ time, text })
+              }
             }
           }
         }
@@ -348,6 +516,7 @@ export const usePlayerStore = defineStore('player', {
           // 停止播放
           if (this.currentSong.howl) {
             this.currentSong.howl.stop()
+            this.currentSong.howl.unload()
             this.currentSong.howl = null
           }
 
@@ -381,6 +550,7 @@ export const usePlayerStore = defineStore('player', {
       // 停止当前播放
       if (this.currentSong && this.currentSong.howl) {
         this.currentSong.howl.stop()
+        this.currentSong.howl.unload()
       }
 
       // 清空播放列表
@@ -423,7 +593,7 @@ export const usePlayerStore = defineStore('player', {
         this.playlist = playlist.map((song: any) => ({
           ...song,
           howl: null,
-          audioData: ''
+          playSrc: undefined
         }))
 
         this.volume = volume

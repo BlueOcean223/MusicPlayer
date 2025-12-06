@@ -60,9 +60,13 @@
               @click="handleSeek"
               class="progress-slider"
               :tooltip="false"
+              :disabled="!hasDuration"
             />
           </div>
           <span class="time-text">{{ formatTime(duration) }}</span>
+        </div>
+        <div v-if="playerStore.playError" class="play-error">
+          {{ playerStore.playError }}
         </div>
       </div>
       
@@ -165,29 +169,34 @@ const progress = computed(() => {
   if (isDragging.value) return dragValue.value
   if (!playerStore.currentSong) return 0
   
-  const duration = playerStore.currentSong.duration
-  return duration ? (playerStore.currentTime / duration) * 100 : 0
+  return duration.value ? (playerStore.currentTime / duration.value) * 100 : 0
 })
 
 // 计算总时长
 const duration = computed(() => {
-  if (!playerStore.currentSong) return 0
-  return playerStore.currentSong.duration
+  const current = playerStore.currentSong
+  const howlDuration = current?.howl?.duration()
+  if (howlDuration && !isNaN(howlDuration)) {
+    return howlDuration
+  }
+  return current?.duration || 0
 })
 
+const hasDuration = computed(() => duration.value > 0)
+
 // 拖动处理
-const handleDragStart = () => { isDragging.value = true }
+const handleDragStart = () => { if (hasDuration.value) isDragging.value = true }
 const handleDragUpdate = (value: number) => { if (isDragging.value) dragValue.value = value }
 const handleDragEnd = () => {
-  if (isDragging.value && playerStore.currentSong?.duration) {
-    const seekTime = (dragValue.value / 100) * playerStore.currentSong.duration
+  if (isDragging.value && hasDuration.value) {
+    const seekTime = (dragValue.value / 100) * duration.value
     playerStore.seek(seekTime)
   }
   isDragging.value = false
 }
 const handleSeek = (value: number) => {
-  if (!isDragging.value && playerStore.currentSong?.duration) {
-    playerStore.seek((value / 100) * playerStore.currentSong.duration)
+  if (!isDragging.value && hasDuration.value) {
+    playerStore.seek((value / 100) * duration.value)
   }
 }
 
@@ -377,6 +386,13 @@ const showNowPlaying = () => {
   flex: 1;
   display: flex;
   align-items: center;
+}
+
+.play-error {
+  margin-top: 4px;
+  color: #ff7b7b;
+  font-size: 12px;
+  text-align: center;
 }
 
 /* Volume */

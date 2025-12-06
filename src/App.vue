@@ -1,20 +1,22 @@
 <template>
-  <div class="app-container">
-    <!-- 固定菜单栏 -->
-    <div class="app-header">
-      <TitleBar />
+  <NMessageProvider>
+    <div class="app-container">
+      <!-- 固定菜单栏 -->
+      <div class="app-header">
+        <TitleBar />
+      </div>
+      
+      <!-- 可滚动的主内容区域 -->
+      <div class="app-content">
+        <router-view />
+      </div>
+      
+      <!-- 固定音乐控制栏 -->
+      <div class="app-footer">
+        <MusicPlayer />
+      </div>
     </div>
-    
-    <!-- 可滚动的主内容区域 -->
-    <div class="app-content">
-      <router-view />
-    </div>
-    
-    <!-- 固定音乐控制栏 -->
-    <div class="app-footer">
-      <MusicPlayer />
-    </div>
-  </div>
+  </NMessageProvider>
 </template>
 
 <script setup lang="ts">
@@ -22,6 +24,7 @@ import TitleBar from './components/TitleBar.vue'
 import MusicPlayer from './components/MusicPlayer.vue'
 import { usePlayerStore } from './store/player'
 import { onMounted } from 'vue'
+import { NMessageProvider } from 'naive-ui'
 
 // 在程序启动时，加载本地缓存
 onMounted(() => {

@@ -4,10 +4,21 @@
 )]
 
 use base64::{engine::general_purpose, Engine as _};
+use hound::{SampleFormat, WavSpec, WavWriter};
 use lofty::{Accessor, AudioFile, Probe, TaggedFileExt};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
+use std::{fs, fs::File, path::{Path, PathBuf}};
+use symphonia::{
+    core::{
+        audio::SampleBuffer,
+        codecs::DecoderOptions,
+        errors::Error as SymphoniaError,
+        formats::FormatOptions,
+        io::MediaSourceStream,
+        meta::MetadataOptions,
+    },
+    default::{get_codecs, get_probe},
+};
 use tauri::command;
 use tauri_plugin_dialog::DialogExt;
 
@@ -123,6 +134,151 @@ async fn parse_music_metadata(file_path: String) -> Result<MusicMetadata, String
         genre,
         year,
     })
+}
+
+/// 确保音频可播放，必要时对 FLAC 等格式转码为 WAV，返回可用的本地文件路径。
+#[command]
+async fn ensure_playable_file(file_path: String) -> Result<String, String> {
+    let path = Path::new(&file_path);
+
+    if !path.exists() {
+        return Err(format!("文件不存在: {}", file_path));
+    }
+
+    let ext = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    // HTML5 Audio 在桌面端常见可直接播放的格式集合
+    let directly_supported = [
+        "mp3", "wav", "ogg", "oga", "m4a", "aac", "mp4", "webm", "opus",
+    ];
+
+    if directly_supported.contains(&ext.as_str()) {
+        return Ok(file_path);
+    }
+
+    // 对 FLAC 做一次性转码
+    if ext == "flac" {
+        let wav_path = transcode_flac_to_wav(path)?;
+        return Ok(wav_path.to_string_lossy().to_string());
+    }
+
+    Err(format!("不支持的音频格式: {}", ext))
+}
+
+/// 将 FLAC 转码为 16-bit PCM WAV，缓存至临时目录以避免重复开销。
+fn transcode_flac_to_wav(src: &Path) -> Result<PathBuf, String> {
+    let cache_dir = std::env::temp_dir().join("musicplayer-cache");
+    fs::create_dir_all(&cache_dir).map_err(|e| format!("创建缓存目录失败: {}", e))?;
+
+    // 使用文件名作为输出基名，必要时简单规避冲突
+    let stem = src
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("audio");
+    let out_path = cache_dir.join(format!("{}.wav", stem));
+
+    // 若缓存存在且未过期则直接复用
+    let needs_refresh = match (fs::metadata(&out_path), fs::metadata(src)) {
+        (Ok(dst), Ok(src_meta)) => match (dst.modified().ok(), src_meta.modified().ok()) {
+            (Some(d), Some(s)) => d < s,
+            _ => false,
+        },
+        _ => true,
+    };
+    if !needs_refresh {
+        return Ok(out_path);
+    }
+
+    let file = File::open(src).map_err(|e| format!("打开文件失败: {}", e))?;
+    let mss = MediaSourceStream::new(Box::new(file), Default::default());
+
+    let probed = get_probe()
+        .format(
+            &Default::default(),
+            mss,
+            &FormatOptions::default(),
+            &MetadataOptions::default(),
+        )
+        .map_err(|e| format!("解析音频失败: {}", e))?;
+
+    let mut format = probed.format;
+    let track = format
+        .default_track()
+        .ok_or_else(|| "未找到默认音轨".to_string())?;
+
+    let mut decoder = get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+        .map_err(|e| format!("创建解码器失败: {}", e))?;
+
+    let sample_rate = track
+        .codec_params
+        .sample_rate
+        .ok_or_else(|| "缺少采样率".to_string())?;
+    let channels = track
+        .codec_params
+        .channels
+        .ok_or_else(|| "缺少声道信息".to_string())?
+        .count() as u16;
+
+    let spec = WavSpec {
+        channels,
+        sample_rate,
+        bits_per_sample: 16,
+        sample_format: SampleFormat::Int,
+    };
+
+    let mut wav_writer =
+        WavWriter::create(&out_path, spec).map_err(|e| format!("创建WAV失败: {}", e))?;
+
+    let mut sample_buf: Option<SampleBuffer<i16>> = None;
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(packet) => packet,
+            Err(SymphoniaError::IoError(err))
+                if err.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                break
+            }
+            Err(SymphoniaError::ResetRequired) => {
+                decoder.reset();
+                continue;
+            }
+            Err(e) => return Err(format!("读取数据失败: {}", e)),
+        };
+
+        let decoded = match decoder.decode(&packet) {
+            Ok(buf) => buf,
+            Err(SymphoniaError::DecodeError(_)) => continue,
+            Err(e) => return Err(format!("解码失败: {}", e)),
+        };
+
+        if sample_buf.is_none() {
+            sample_buf = Some(SampleBuffer::<i16>::new(
+                decoded.capacity() as u64,
+                *decoded.spec(),
+            ));
+        }
+
+        if let Some(buf) = sample_buf.as_mut() {
+            buf.copy_interleaved_ref(decoded);
+            for &sample in buf.samples() {
+                wav_writer
+                    .write_sample(sample)
+                    .map_err(|e| format!("写入WAV失败: {}", e))?;
+            }
+        }
+    }
+
+    wav_writer
+        .finalize()
+        .map_err(|e| format!("完成WAV失败: {}", e))?;
+
+    Ok(out_path)
 }
 
 // 读取歌词（从文件内嵌或在线获取）
@@ -328,7 +484,8 @@ fn main() {
             open_music_files,
             read_file,
             parse_music_metadata,
-            read_lyrics
+            read_lyrics,
+            ensure_playable_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

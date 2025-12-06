@@ -171,7 +171,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { usePlayerStore } from '../store/player'
-import { NButton, NIcon, NInput } from 'naive-ui'
+import { NButton, NIcon, NInput, useMessage } from 'naive-ui'
 import { 
   AddOutline, 
   MusicalNotesOutline,
@@ -188,6 +188,7 @@ import { invoke } from '@tauri-apps/api/core'
 const playerStore = usePlayerStore()
 const isManageMode = ref(false)
 const searchQuery = ref('')
+const message = useMessage()
 
 // Filter logic
 const filteredPlaylist = computed(() => {
@@ -212,10 +213,14 @@ const importMusic = async () => {
   try {
     const filePaths = await invoke<string[]>('open_music_files')
     if (filePaths.length > 0) {
-      await playerStore.addSongs(filePaths)
+      const result = await playerStore.addSongs(filePaths)
+      if (result) {
+        message.success(`导入成功 ${result.success} 首，重复 ${result.duplicate} 首，失败 ${result.failed} 首`)
+      }
     }
   } catch (error) {
     console.error('Error importing music:', error)
+    message.error('导入音乐失败')
   }
 }
 
