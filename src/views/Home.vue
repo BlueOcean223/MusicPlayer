@@ -122,6 +122,7 @@ import {
   CheckmarkOutline,
   TrashOutline
 } from '@vicons/ionicons5'
+import { invoke } from '@tauri-apps/api/tauri'
 
 const playerStore = usePlayerStore()
 const isManageMode = ref(false)
@@ -139,7 +140,7 @@ const formatTime = (seconds: number) => {
 
 const importMusic = async () => {
   try {
-    const filePaths = await window.musicPlayerAPI.openMusicFiles()
+    const filePaths = await invoke<string[]>('open_music_files')
     if (filePaths.length > 0) {
       await playerStore.addSongs(filePaths)
     }

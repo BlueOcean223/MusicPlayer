@@ -18,9 +18,4 @@ app.use(pinia)
 app.use(router)
 app.use(naive)
 
-app.mount('#app').$nextTick(() => {
-  // Use contextBridge
-  window.ipcRenderer.on('main-process-message', (_event, message) => {
-    console.log(message)
-  })
-})
+app.mount('#app')

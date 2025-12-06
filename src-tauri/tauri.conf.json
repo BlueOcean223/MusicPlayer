@@ -1,0 +1,86 @@
+{
+    "build": {
+        "beforeDevCommand": "npm run dev:vite",
+        "beforeBuildCommand": "npm run build:vite",
+        "devPath": "http://localhost:5173",
+        "distDir": "../dist"
+    },
+    "package": {
+        "productName": "MusicPlayer",
+        "version": "1.0.0"
+    },
+    "tauri": {
+        "allowlist": {
+            "all": false,
+            "dialog": {
+                "all": false,
+                "open": true
+            },
+            "window": {
+                "all": false,
+                "minimize": true,
+                "maximize": true,
+                "unmaximize": true,
+                "close": true,
+                "startDragging": true
+            },
+            "http": {
+                "all": false,
+                "request": true,
+                "scope": [
+                    "https://music.163.com/**",
+                    "https://c.y.qq.com/**"
+                ]
+            }
+        },
+        "bundle": {
+            "active": true,
+            "category": "Music",
+            "copyright": "",
+            "deb": {
+                "depends": []
+            },
+            "externalBin": [],
+            "icon": [
+                "icons/32x32.png",
+                "icons/128x128.png",
+                "icons/128x128@2x.png",
+                "icons/icon.icns",
+                "icons/icon.ico"
+            ],
+            "identifier": "com.musicplayer.app",
+            "longDescription": "",
+            "macOS": {
+                "entitlements": null,
+                "exceptionDomain": "",
+                "frameworks": [],
+                "providerShortName": null,
+                "signingIdentity": null
+            },
+            "resources": [],
+            "shortDescription": "",
+            "targets": "all",
+            "windows": {
+                "certificateThumbprint": null,
+                "digestAlgorithm": "sha256",
+                "timestampUrl": ""
+            }
+        },
+        "security": {
+            "csp": "default-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://music.163.com https://c.y.qq.com"
+        },
+        "windows": [
+            {
+                "fullscreen": false,
+                "height": 670,
+                "resizable": true,
+                "title": "MusicPlayer",
+                "width": 1000,
+                "decorations": false,
+                "center": true,
+                "minWidth": 800,
+                "minHeight": 600
+            }
+        ]
+    }
+}

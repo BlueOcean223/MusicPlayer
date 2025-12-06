@@ -1,6 +1,6 @@
 <template>
   <div class="title-bar">
-    <div class="title-section">
+    <div class="title-section" data-tauri-drag-region>
       <img src="../assets/music.svg" alt="Logo" class="logo" />
       <span class="title">MusicPlayer</span>
     </div>
@@ -40,31 +40,24 @@
 <script setup lang="ts">
 import { NButton, NIcon, NSpace } from 'naive-ui'
 import { RemoveOutline, CropOutline, CloseOutline } from '@vicons/ionicons5'
+import { appWindow } from '@tauri-apps/api/window'
 
 
 // 窗口控制函数
 const minimizeWindow = () => {
-  if (window.windowControl) {
-    window.windowControl.minimize()
-  } else {
-    console.error('windowControl not available')
-  }
+  appWindow.minimize()
 }
 
-const maximizeWindow = () => {
-  if (window.windowControl) {
-    window.windowControl.maximize()
+const maximizeWindow = async () => {
+  if (await appWindow.isMaximized()) {
+    appWindow.unmaximize()
   } else {
-    console.error('windowControl not available')
+    appWindow.maximize()
   }
 }
 
 const closeWindow = () => {
-  if (window.windowControl) {
-    window.windowControl.close()
-  } else {
-    console.error('windowControl not available')
-  }
+  appWindow.close()
 }
 </script>
 
@@ -77,7 +70,6 @@ const closeWindow = () => {
   background-color: #1a1a1a;
   height: 40px;
   padding: 0 10px;
-  -webkit-app-region: drag;
   user-select: none;
 }
 
@@ -85,6 +77,8 @@ const closeWindow = () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1;
+  height: 100%;
 }
 
 .logo {
