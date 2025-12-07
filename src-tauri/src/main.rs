@@ -5,8 +5,14 @@
 
 use base64::{engine::general_purpose, Engine as _};
 use hound::{SampleFormat, WavSpec, WavWriter};
-use lofty::{Accessor, AudioFile, Probe, TaggedFileExt};
+use lofty::config::ParseOptions;
+use lofty::file::{AudioFile, TaggedFileExt};
+use lofty::probe::Probe;
+use lofty::tag::{Accessor, ItemKey, ItemValue};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::{fs, fs::File, path::{Path, PathBuf}};
 use symphonia::{
     core::{
@@ -21,6 +27,15 @@ use symphonia::{
 };
 use tauri::command;
 use tauri_plugin_dialog::DialogExt;
+
+// 全局 HTTP 客户端，复用连接提升性能
+static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .build()
+        .expect("Failed to create HTTP client")
+});
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MusicMetadata {
@@ -81,28 +96,17 @@ async fn parse_music_metadata(file_path: String) -> Result<MusicMetadata, String
 
     let tagged_file = Probe::open(path)
         .map_err(|e| format!("打开文件失败: {}", e))?
+        .options(ParseOptions::new())
         .read()
         .map_err(|e| format!("读取文件失败: {}", e))?;
 
     let properties = tagged_file.properties();
     let duration = properties.duration().as_secs_f64();
 
-    // 获取标签信息
+    // 获取标签信息（复用，避免重复调用）
     let tag = tagged_file
         .primary_tag()
         .or_else(|| tagged_file.first_tag());
-
-    let (title, artist, album, genre, year) = if let Some(tag) = tag {
-        (
-            tag.title().map(|s| s.to_string()),
-            tag.artist().map(|s| s.to_string()),
-            tag.album().map(|s| s.to_string()),
-            tag.genre().map(|s| s.to_string()),
-            tag.year(),
-        )
-    } else {
-        (None, None, None, None, None)
-    };
 
     // 从文件名提取标题（如果没有标签）
     let file_name = path
@@ -111,18 +115,24 @@ async fn parse_music_metadata(file_path: String) -> Result<MusicMetadata, String
         .unwrap_or("未知标题")
         .to_string();
 
-    // 提取专辑封面
-    let album_art = if let Some(tag) = tagged_file
-        .primary_tag()
-        .or_else(|| tagged_file.first_tag())
-    {
-        tag.pictures().first().map(|pic| {
-            let mime = pic.mime_type().map(|m| m.as_str()).unwrap_or("image/jpeg");
+    let (title, artist, album, genre, year, album_art) = if let Some(tag) = tag {
+        // 提取专辑封面（复用 tag 变量）
+        let cover = tag.pictures().first().map(|pic| {
+            let mime = pic.mime_type().map_or("image/jpeg", |m| m.as_str());
             let base64_data = general_purpose::STANDARD.encode(pic.data());
             format!("data:{};base64,{}", mime, base64_data)
-        })
+        });
+
+        (
+            tag.title().map(|s| s.to_string()),
+            tag.artist().map(|s| s.to_string()),
+            tag.album().map(|s| s.to_string()),
+            tag.genre().map(|s| s.to_string()),
+            tag.year(),
+            cover,
+        )
     } else {
-        None
+        (None, None, None, None, None, None)
     };
 
     Ok(MusicMetadata {
@@ -169,17 +179,21 @@ async fn ensure_playable_file(file_path: String) -> Result<String, String> {
     Err(format!("不支持的音频格式: {}", ext))
 }
 
+/// 生成文件路径的唯一哈希值，避免同名文件冲突
+fn file_path_hash(path: &Path) -> String {
+    let mut hasher = DefaultHasher::new();
+    path.hash(&mut hasher);
+    format!("{:x}", hasher.finish())
+}
+
 /// 将 FLAC 转码为 16-bit PCM WAV，缓存至临时目录以避免重复开销。
 fn transcode_flac_to_wav(src: &Path) -> Result<PathBuf, String> {
     let cache_dir = std::env::temp_dir().join("musicplayer-cache");
     fs::create_dir_all(&cache_dir).map_err(|e| format!("创建缓存目录失败: {}", e))?;
 
-    // 使用文件名作为输出基名，必要时简单规避冲突
-    let stem = src
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("audio");
-    let out_path = cache_dir.join(format!("{}.wav", stem));
+    // 使用文件完整路径的哈希值作为缓存键，避免同名文件冲突
+    let cache_name = file_path_hash(src);
+    let out_path = cache_dir.join(format!("{}.wav", cache_name));
 
     // 若缓存存在且未过期则直接复用
     let needs_refresh = match (fs::metadata(&out_path), fs::metadata(src)) {
@@ -295,15 +309,17 @@ async fn read_lyrics(
     }
 
     // 1. 尝试读取内嵌歌词
-    if let Ok(tagged_file) = Probe::open(path).and_then(|p| p.read()) {
+    if let Ok(tagged_file) = Probe::open(path)
+        .and_then(|p| p.options(ParseOptions::new()).read())
+    {
         if let Some(tag) = tagged_file
             .primary_tag()
             .or_else(|| tagged_file.first_tag())
         {
             // 检查是否有 LYRICS 帧
             for item in tag.items() {
-                if let lofty::ItemKey::Lyrics = item.key() {
-                    if let lofty::ItemValue::Text(lyrics) = item.value() {
+                if let ItemKey::Lyrics = item.key() {
+                    if let ItemValue::Text(lyrics) = item.value() {
                         return Ok(Some(lyrics.clone()));
                     }
                 }
@@ -332,23 +348,42 @@ async fn read_lyrics(
     Ok(None)
 }
 
-// 从网易云音乐获取歌词
+/// 计算两个字符串的相似度 (简单实现)
+fn string_similarity(a: &str, b: &str) -> f64 {
+    let a_lower = a.to_lowercase();
+    let b_lower = b.to_lowercase();
+    if a_lower == b_lower {
+        return 1.0;
+    }
+    if a_lower.contains(&b_lower) || b_lower.contains(&a_lower) {
+        return 0.8;
+    }
+    // 简单的字符匹配
+    let a_chars: std::collections::HashSet<char> = a_lower.chars().collect();
+    let b_chars: std::collections::HashSet<char> = b_lower.chars().collect();
+    let intersection = a_chars.intersection(&b_chars).count();
+    let union = a_chars.union(&b_chars).count();
+    if union == 0 {
+        0.0
+    } else {
+        intersection as f64 / union as f64
+    }
+}
+
+// 从网易云音乐获取歌词（使用全局 HTTP 客户端）
 async fn fetch_lyrics_from_netease(title: &str, artist: &str) -> Result<Option<String>, String> {
-    let client = reqwest::Client::new();
     let query_string = format!("{} {}", title, artist);
     let search_query = urlencoding::encode(&query_string);
 
     // 搜索歌曲
     let search_url = format!(
-        "https://music.163.com/api/search/get/web?csrf_token=hlpretag=&hlposttag=&s={}&type=1&offset=0&total=true&limit=5",
+        "https://music.163.com/api/search/get/web?csrf_token=hlpretag=&hlposttag=&s={}&type=1&offset=0&total=true&limit=10",
         search_query
     );
 
-    let search_response = client
+    let search_response = HTTP_CLIENT
         .get(&search_url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         .header("Referer", "https://music.163.com/")
-        .timeout(std::time::Duration::from_secs(10))
         .send()
         .await
         .map_err(|e| format!("搜索请求失败: {}", e))?;
@@ -358,18 +393,43 @@ async fn fetch_lyrics_from_netease(title: &str, artist: &str) -> Result<Option<S
         .await
         .map_err(|e| format!("解析搜索结果失败: {}", e))?;
 
-    // 获取第一首歌的ID
-    let song_id = search_data
+    // 获取搜索结果并找到最匹配的歌曲
+    let songs = search_data
         .get("result")
         .and_then(|r| r.get("songs"))
-        .and_then(|s| s.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|song| song.get("id"))
-        .and_then(|id| id.as_i64());
+        .and_then(|s| s.as_array());
 
-    let song_id = match song_id {
-        Some(id) => id,
-        None => return Ok(None),
+    let songs = match songs {
+        Some(arr) if !arr.is_empty() => arr,
+        _ => return Ok(None),
+    };
+
+    // 找到最匹配的歌曲
+    let mut best_match: Option<(i64, f64)> = None;
+    for song in songs {
+        let song_name = song.get("name").and_then(|n| n.as_str()).unwrap_or("");
+        let song_artist = song
+            .get("artists")
+            .and_then(|a| a.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|a| a.get("name"))
+            .and_then(|n| n.as_str())
+            .unwrap_or("");
+
+        let title_sim = string_similarity(title, song_name);
+        let artist_sim = string_similarity(artist, song_artist);
+        let total_sim = title_sim * 0.6 + artist_sim * 0.4; // 标题权重更高
+
+        if let Some(id) = song.get("id").and_then(|id| id.as_i64()) {
+            if best_match.is_none() || total_sim > best_match.unwrap().1 {
+                best_match = Some((id, total_sim));
+            }
+        }
+    }
+
+    let song_id = match best_match {
+        Some((id, sim)) if sim > 0.3 => id, // 相似度阈值
+        _ => return Ok(None),
     };
 
     // 获取歌词
@@ -378,11 +438,9 @@ async fn fetch_lyrics_from_netease(title: &str, artist: &str) -> Result<Option<S
         song_id
     );
 
-    let lyrics_response = client
+    let lyrics_response = HTTP_CLIENT
         .get(&lyrics_url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         .header("Referer", "https://music.163.com/")
-        .timeout(std::time::Duration::from_secs(10))
         .send()
         .await
         .map_err(|e| format!("歌词请求失败: {}", e))?;
@@ -401,26 +459,20 @@ async fn fetch_lyrics_from_netease(title: &str, artist: &str) -> Result<Option<S
     Ok(lyrics)
 }
 
-// 从QQ音乐获取歌词
+// 从QQ音乐获取歌词（使用全局 HTTP 客户端）
 async fn fetch_lyrics_from_qq(title: &str, artist: &str) -> Result<Option<String>, String> {
-    let client = reqwest::Client::new();
     let query_string = format!("{} {}", title, artist);
     let search_query = urlencoding::encode(&query_string);
 
     // 搜索歌曲
     let search_url = format!(
-        "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?ct=24&qqmusic_ver=1298&new_json=1&remoteplace=txt.yqq.song&searchid=&t=0&aggr=1&cr=1&catZhida=1&lossless=0&flag_qc=0&p=1&n=5&w={}&format=json&inCharset=utf8&outCharset=utf-8",
+        "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?ct=24&qqmusic_ver=1298&new_json=1&remoteplace=txt.yqq.song&searchid=&t=0&aggr=1&cr=1&catZhida=1&lossless=0&flag_qc=0&p=1&n=10&w={}&format=json&inCharset=utf8&outCharset=utf-8",
         search_query
     );
 
-    let search_response = client
+    let search_response = HTTP_CLIENT
         .get(&search_url)
-        .header(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        )
         .header("Referer", "https://y.qq.com/")
-        .timeout(std::time::Duration::from_secs(10))
         .send()
         .await
         .map_err(|e| format!("搜索请求失败: {}", e))?;
@@ -430,19 +482,44 @@ async fn fetch_lyrics_from_qq(title: &str, artist: &str) -> Result<Option<String
         .await
         .map_err(|e| format!("解析搜索结果失败: {}", e))?;
 
-    // 获取第一首歌的songmid
-    let songmid = search_data
+    // 获取搜索结果并找到最匹配的歌曲
+    let songs = search_data
         .get("data")
         .and_then(|d| d.get("song"))
         .and_then(|s| s.get("list"))
-        .and_then(|l| l.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|song| song.get("songmid"))
-        .and_then(|mid| mid.as_str());
+        .and_then(|l| l.as_array());
 
-    let songmid = match songmid {
-        Some(mid) => mid,
-        None => return Ok(None),
+    let songs = match songs {
+        Some(arr) if !arr.is_empty() => arr,
+        _ => return Ok(None),
+    };
+
+    // 找到最匹配的歌曲
+    let mut best_match: Option<(&str, f64)> = None;
+    for song in songs {
+        let song_name = song.get("songname").and_then(|n| n.as_str()).unwrap_or("");
+        let song_artist = song
+            .get("singer")
+            .and_then(|a| a.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|a| a.get("name"))
+            .and_then(|n| n.as_str())
+            .unwrap_or("");
+
+        let title_sim = string_similarity(title, song_name);
+        let artist_sim = string_similarity(artist, song_artist);
+        let total_sim = title_sim * 0.6 + artist_sim * 0.4;
+
+        if let Some(mid) = song.get("songmid").and_then(|m| m.as_str()) {
+            if best_match.is_none() || total_sim > best_match.unwrap().1 {
+                best_match = Some((mid, total_sim));
+            }
+        }
+    }
+
+    let songmid = match best_match {
+        Some((mid, sim)) if sim > 0.3 => mid,
+        _ => return Ok(None),
     };
 
     // 获取歌词
@@ -451,14 +528,9 @@ async fn fetch_lyrics_from_qq(title: &str, artist: &str) -> Result<Option<String
         songmid
     );
 
-    let lyrics_response = client
+    let lyrics_response = HTTP_CLIENT
         .get(&lyrics_url)
-        .header(
-            "User-Agent",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        )
         .header("Referer", "https://y.qq.com/")
-        .timeout(std::time::Duration::from_secs(10))
         .send()
         .await
         .map_err(|e| format!("歌词请求失败: {}", e))?;

@@ -70,21 +70,14 @@ onMounted(() => {
 }
 
 
-/* 去除所有元素的focus outline */
-* {
-  outline: none !important;
+/* 仅对鼠标用户隐藏 focus outline，保持键盘导航可访问性 */
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
-/* 去除按钮的focus样式 */
-button:focus,
-button:active {
-  outline: none !important;
-  box-shadow: none !important;
-}
-
-/* 去除输入框的focus样式 */
-input:focus,
-textarea:focus {
-  outline: none !important;
+/* 键盘导航时显示 focus 样式 */
+:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
 }
 </style>

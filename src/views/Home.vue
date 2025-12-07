@@ -170,7 +170,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { usePlayerStore } from '../store/player'
+import { usePlayerStore, Song } from '../store/player'
 import { NButton, NIcon, NInput, useMessage } from 'naive-ui'
 import { 
   AddOutline, 
@@ -224,7 +224,7 @@ const importMusic = async () => {
   }
 }
 
-const playSong = (song: any) => {
+const playSong = (song: Song) => {
   playerStore.play(song)
 }
 
