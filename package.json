@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
+    "tauri": "tauri",
     "dev:vite": "vite",
     "build:vite": "vue-tsc --noEmit && vite build",
     "preview": "vite preview"
